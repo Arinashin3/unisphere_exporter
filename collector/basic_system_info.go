@@ -7,19 +7,6 @@ import (
 	"unisphere_exporter/types"
 )
 
-//type BasicSystemInfoEntries struct {
-//	Entries []types.BasicSystemInfo `json:"entries"`
-//}
-//
-//var (
-//	info = prometheus.NewDesc("test", "help", nil, nil)
-//)
-//
-//type BasicSystemInfoDesc struct {
-//	info *prometheus.Collector
-//	ver  *prometheus.Collector
-//}
-
 const basicSystemSubName = "basicsystem"
 
 type BasicSystemCollector struct {
