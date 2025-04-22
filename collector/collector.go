@@ -55,10 +55,10 @@ func Probe(w http.ResponseWriter, r *http.Request, logger *slog.Logger, reg *pro
 		return
 	}
 
-	uc, _ := client.NewClient(target, module, logger)
-	//if !conected {
-	//	return
-	//}
+	uc, connected := client.NewClient(target, module, logger)
+	if !connected {
+		return
+	}
 
 	u := &UnisphereCollector
 	u.Client = uc
