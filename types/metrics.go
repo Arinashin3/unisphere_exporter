@@ -63,18 +63,19 @@ type StoragePoolContent struct {
 	IsAllFlash                  bool    `json:"isAllFlash"`
 }
 
+// Basic System Information Entries
 type BasicSystemInfo struct {
-	Content BasicSystemInfoContent `json:"content"`
-}
-
-type BasicSystemInfoContent struct {
-	ID                  string `json:"id"`
-	Name                string `json:"name"`
-	Model               string `json:"model"`
-	SoftwareVersion     string `json:"softwareVersion"`
-	SoftwareFullVersion string `json:"softwareFullVersion"`
-	ApiVersion          string `json:"apiVersion"`
-	EarliestApiVersion  string `json:"earliestApiVersion"`
+	Entries []struct {
+		Content struct {
+			ID                  string `json:"id"`
+			Name                string `json:"name"`
+			Model               string `json:"model"`
+			SoftwareVersion     string `json:"softwareVersion"`
+			SoftwareFullVersion string `json:"softwareFullVersion"`
+			ApiVersion          string `json:"apiVersion"`
+			EarliestApiVersion  string `json:"earliestApiVersion"`
+		} `json:"content"`
+	} `json:"entries"`
 }
 
 type SysCapacity struct {

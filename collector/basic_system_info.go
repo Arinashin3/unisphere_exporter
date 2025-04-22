@@ -1,8 +1,10 @@
 package collector
 
 import (
+	"encoding/json"
 	"github.com/prometheus/client_golang/prometheus"
 	"unisphere_exporter/client"
+	"unisphere_exporter/types"
 )
 
 //type BasicSystemInfoEntries struct {
@@ -18,106 +20,45 @@ import (
 //	ver  *prometheus.Collector
 //}
 
+const basicSystemSubName = "basicsystem"
+
 type BasicSystemCollector struct {
 	subName string
 }
 
-type BasicSystemInfo struct {
-	Entries []struct {
-		Content struct {
-			ID                 string `json:"id"`
-			Model              string `json:"model"`
-			Name               string `json:"name"`
-			SoftwareVersion    string `json:"softwareVersion"`
-			APIVersion         string `json:"apiVersion"`
-			EarliestAPIVersion string `json:"earliestApiVersion"`
-		} `json:"content"`
-	} `json:"entries"`
-}
-
-func NewBasicSystemCollector(sub string) Collector {
+func NewBasicSystemCollector() Collector {
 	return &BasicSystemCollector{
-		subName: sub,
+		subName: basicSystemSubName,
 	}
 }
 
 func init() {
 	subName := "basicsystem"
-	NewCollector(subName, NewBasicSystemCollector(subName))
+	NewCollector(subName, NewBasicSystemCollector())
 }
 
+var (
+	infoDesc = prometheus.NewDesc(
+		BuildFQName(basicSystemSubName, "info"),
+		"",
+		[]string{"id", "model", "sw_ver", "api_ver"}, nil,
+	)
+)
+
 func (c *BasicSystemCollector) Update(uc *client.UnisphereClient, ch chan<- prometheus.Metric) float64 {
-	//var jData BasicSystemInfo
-	resp := uc.Get("/api/types/basicSystemInfo/instances", "compact=true")
+	var jData types.BasicSystemInfo
+	path := "/api/types/basicSystemInfo/instances"
+	resp := uc.Get(path, "compact=true")
 	if resp == nil {
 		return 0.0
 	}
-	//json.Unmarshal(resp, &jData)
-
+	err := json.Unmarshal(resp, &jData)
+	if err != nil {
+		uc.Logger.Error("Unmarshal Error", "path", path, "error_msg", err)
+	}
+	for _, content := range jData.Entries {
+		d := content.Content
+		ch <- prometheus.MustNewConstMetric(infoDesc, 2, 1.0, d.ID, d.Model, d.SoftwareVersion, d.ApiVersion)
+	}
 	return 1.0
 }
-
-//type BasicSystemDesc struct {
-//	infoDesc *prometheus.Desc
-//}
-//
-//
-//type BasicSystemCollector struct {
-//	subsystem string
-//	metricDesc *prometheus.Desc
-//}
-//func NewBasicSystemCollector() Collector {
-//
-//return &BasicSystemCollector{subsystem: namespace}
-//
-//}
-//
-//type BasicSystemCollector struct {
-//	info *typedDesc
-//}
-
-//func (c *BasicSystemCollector) Update(ch chan<- prometheus.Metric) float64 {
-//
-//}
-
-//func getBasicSystemInfo(uc *client.UnisphereClient, reg *prometheus.Registry) (BasicSystemInfoEntries, bool) {
-//
-//	var resp BasicSystemInfoEntries
-//	err := c.Get("/api/types/basicSystemInfo/instances", "compact=true", &resp)
-//	if err != nil {
-//		log.Printf("Error getting basic system info: %s", err)
-//		return BasicSystemInfoEntries{}, false
-//	}
-//
-//	return resp, true
-//
-//}
-//func ProbeBasicSystemInfo(uc client.UnisphereClient, registry *prometheus.Registry) bool {
-//	// Variable qr is return value
-//	qr := false
-//
-//	//data, qr := getBasicSystemInfo(uc)
-//	if qr == false {
-//		return qr
-//	}
-//	labels := []string{"system_name"}
-//
-//	mBasicSysInfo := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "unisphere_basic_system_info", Help: "This storage systems's Infomation"}, append(labels, "model"))
-//	mBasicSysSoftVersion := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "unisphere_basic_system_software_version", Help: "Software version of this storage system."}, append(labels, "version", "full_version"))
-//	mBasicSysApiVersion := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "unisphere_basic_system_api_version", Help: "Latest REST API Version, that this storage system supports."}, append(labels, "api_version"))
-//	mBasicSysEarliestApiVersion := prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "unisphere_basic_system_api_version", Help: "Earliest REST API Version, that this storage system supports."}, append(labels, "api_version"))
-//
-//	registry.MustRegister(mBasicSysInfo)
-//	registry.MustRegister(mBasicSysSoftVersion)
-//	registry.MustRegister(mBasicSysApiVersion)
-//	registry.MustRegister(mBasicSysEarliestApiVersion)
-//
-//	for _, entry := range data.Entries {
-//		mBasicSysInfo.WithLabelValues(entry.Content.Name, entry.Content.Model).Set(1)
-//		mBasicSysSoftVersion.WithLabelValues(entry.Content.Name, entry.Content.SoftwareVersion, entry.Content.SoftwareFullVersion).Set(1)
-//		mBasicSysApiVersion.WithLabelValues(entry.Content.Name, entry.Content.ApiVersion).Set(1)
-//		mBasicSysEarliestApiVersion.WithLabelValues(entry.Content.Name, entry.Content.EarliestApiVersion).Set(1)
-//	}
-//
-//	return true
-//}
