@@ -1,19 +1,12 @@
 package collector
 
 import (
-	//"fmt"
 	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
-	"log"
-	"time"
-	"unisphere_exporter/client"
-
-	//"log"
-
-	//"github.com/prometheus/client_golang/prometheus/promhttp"
-	//"log"
 	"log/slog"
 	"net/http"
+	"time"
+	"unisphere_exporter/client"
 )
 
 const namespace = "unisphere"
@@ -60,10 +53,9 @@ func Probe(w http.ResponseWriter, r *http.Request, logger *slog.Logger, reg *pro
 		return
 	}
 
-	u := &UnisphereCollector
-	u.Client = uc
-	reg.MustRegister(u)
-	log.Println()
+	c := &UnisphereCollector
+	c.Client = uc
+	reg.MustRegister(c)
 
 	h := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 	h.ServeHTTP(w, r)
@@ -91,7 +83,6 @@ func (c *UnisphereCollectorSt) Describe(ch chan<- *prometheus.Desc) {
 func (c *UnisphereCollectorSt) Collect(ch chan<- prometheus.Metric) {
 	for cName, collector := range c.Collectors {
 		execute(cName, collector, c.Client, ch)
-		log.Println(collector)
 	}
 }
 
@@ -104,8 +95,4 @@ func execute(cName string, c Collector, uc *client.UnisphereClient, ch chan<- pr
 	}
 	ch <- prometheus.MustNewConstMetric(scrapeDurationDesc, 2, duration.Seconds(), cName)
 	ch <- prometheus.MustNewConstMetric(scrapeSuccessDesc, 2, success, cName)
-}
-
-func BuildFQName(sub string, name string) string {
-	return prometheus.BuildFQName(namespace, sub, name)
 }

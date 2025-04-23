@@ -176,3 +176,32 @@ func (uc *UnisphereClient) Get(path string, query string) []byte {
 	}
 	return body
 }
+
+func (uc *UnisphereClient) GetMetricQuery(path string, query string) []byte {
+	tgt := uc.url
+	tgt.Path = path
+	tgt.RawQuery = query
+	tgt.Scheme = "http"
+	req, err := http.NewRequest("GET", tgt.String(), nil)
+	if err != nil {
+		uc.Logger.Error("Login Failed", "error", err)
+	}
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", "Basic "+uc.auth)
+	req.Header.Add("X-EMC-REST-CLIENT", "true")
+	//req.WithContext(uc.ctx)
+
+	resp, err := uc.hc.Do(req)
+	if err != nil {
+		uc.Logger.Debug("Failed to request", "path", path, "err", err)
+		return nil
+	}
+	defer resp.Body.Close()
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		uc.Logger.Error("Failed to read body", "path", path, "err", err)
+		return nil
+	}
+	return body
+}
