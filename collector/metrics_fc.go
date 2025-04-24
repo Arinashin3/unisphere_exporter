@@ -3,8 +3,8 @@ package collector
 import (
 	"github.com/prometheus/client_golang/prometheus"
 	"log"
-	"strings"
 	"unisphere_exporter/client"
+	"unisphere_exporter/types"
 )
 
 // import (
@@ -20,19 +20,10 @@ func init() {
 	NewCollector(NewMetricFCCollector())
 }
 
-type MetricFCCollector struct {
-	subName    string
-	metricPath []string // Metric Paths
-}
-
-// //	type DescList struct {
-// //		Name string
-// //		Help string
-// //		Type string
-// //	}
 func NewMetricFCCollector() (string, Collector) {
-	subName := "mt_fibrechannel"
-	metricPath := []string{
+	var m MetricCollector
+	m.subName = "realtime_fc"
+	m.metricPath = []string{
 		"sp.*.fibreChannel.fePort.*.readBlocks",
 		"sp.*.fibreChannel.fePort.*.readBytesRate",
 		"sp.*.fibreChannel.fePort.*.reads",
@@ -43,45 +34,26 @@ func NewMetricFCCollector() (string, Collector) {
 		"sp.*.fibreChannel.fePort.*.writesRate",
 	}
 
-	//descList := make(map[string]prometheus.Desc)
-	for _, s := range metricPath {
-		var labels map[string]string
-		MakeDesc(subName, s, labels)
+	m.GenerateCollector()
 
-	}
-
-	return subName, &MetricFCCollector{
-		subName:    subName,
-		metricPath: metricPath,
-	}
+	return m.subName, &m
 }
 
-func MakeDesc(subName string, mPath string, labelSet map[string]string) string {
-	name := mPath
-	var labelList []string
-	if labelSet == nil {
-		labelSet = make(map[string]string)
-	}
-
-	var front string
-	for strings.Contains(name, ".*.") {
-		front, name, _ = strings.Cut(name, ".*.")
-		arr := strings.Split(front, ".")
-		front = strings.TrimLeft(arr[len(arr)-1], ".")
-		labelSet[front] = ""
-	}
-
-	log.Println(front, name)
-	fqName := prometheus.BuildFQName(namespace, subName, name)
-
-	prometheus.NewDesc(fqName, "metric Path by - "+mPath, labelList, nil)
-
-	return ""
-}
-
-func (c *MetricFCCollector) Update(uc *client.UnisphereClient, ch chan<- prometheus.Metric) float64 {
+func (c *MetricCollector) Update(uc *client.UnisphereClient, ch chan<- prometheus.Metric) float64 {
 	var result float64
+	var mq types.MetricQueryEntries
 
+	qid := uc.PostMetricRealTimeQuery(c.metricPath, 60)
+	if qid == 0 {
+		return result
+	}
+	uc.GetMetricRealTimeQueryResult(qid)
+	for _, entry := range mq.Entries {
+		content := entry.Content
+		//ch <- prometheus.MustNewConstMetric(metricList[content.Path], prometheus.GaugeValue, 1.0, "123")
+		log.Println(c.metricList[content.Path])
+
+	}
 	result = 1.0
 	return result
 }

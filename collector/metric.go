@@ -1,71 +1,48 @@
 package collector
 
-//import (
-//	"github.com/prometheus/client_golang/prometheus"
-//	"log"
-//	"unisphere_exporter/client"
-//)
-//
-//func init() {
-//	NewCollector("metric", NewMetric())
-//	//enabled := true
-//	//var test BasicSystemInfoCollector
-//	//
-//	//var m MetricSt
-//	//descField := reflect.TypeOf(desc)
-//	//for i := 0; i < descField.NumField(); i++ {
-//	//	//fn := descField.Field(i).Name
-//	//
-//	//	//fqname := NewFQName(subsystem, fn)
-//	//
-//	//}
-//	//log.Println(c)
-//	//for i, i := range  {
-//
-//	//}
-//}
-//func NewMetric() Collector {
-//	return &MetricCollector{}
-//}
-//
-//type MetricCollector struct {
-//	infoDesc *prometheus.Desc
-//}
-//
-//func (c *MetricCollector) Update(uc *client.UnisphereClient, ch chan<- prometheus.Metric) float64 {
-//
-//	return 0.0
-//}
-//func ProbeMetric(c utils.UnisphereHTTP, registry *prometheus.Registry) bool {
-//	var mStatus = prometheus.NewGaugeVec(prometheus.GaugeOpts{Name: "unisphere_cpu_test", Help: "Cumulative CPU usage in percent"}, []string{"status"})
-//	registry.MustRegister(mStatus)
-//
-//	type Content struct {
-//		Id                  int    `json:"id"`
-//		Name                string `json:"name"`
-//		Path                string `json:"path"`
-//		IsRealtimeAvailable bool   `json:"isRealtimeAvailable"`
-//	}
-//	type Entries []struct {
-//		Content `json:"content"`
-//	}
-//	type AllMetric struct {
-//		Entries `json:"entries"`
-//	}
-//
-//	var st AllMetric
-//	if err := c.Get("/api/types/metric/instances", "compact=true", &st); err != nil {
-//		log.Printf("Error: %v", err)
-//		return false
-//	}
-//
-//	for _, s := range st.Entries {
-//		go func() {
-//			println(s.Id)
-//			println(s.Name)
-//			println(s.Path)
-//		}()
-//	}
-//	mStatus.WithLabelValues("online").Set(1)
-//	return true
-//}
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"strings"
+)
+
+type MetricSet struct {
+	metricDesc *prometheus.Desc
+	labelSet   map[string]string
+}
+
+type MetricCollector struct {
+	subName    string
+	metricPath []string
+	metricList map[string]MetricSet
+}
+
+func (m *MetricCollector) GenerateCollector() {
+	mList := make(map[string]MetricSet)
+	for _, mPath := range m.metricPath {
+		mList[mPath] = makeDesc(m.subName, mPath)
+	}
+	m.metricList = mList
+}
+
+func makeDesc(subName string, mPath string) MetricSet {
+	name := strings.ToLower(mPath)
+	sep := ".*."
+	labelSet := make(map[string]string)
+
+	var labelList []string
+	var pre string
+	for strings.Contains(name, sep) {
+		pre, name, _ = strings.Cut(name, sep)
+		arr := strings.Split(pre, ".")
+		pre = strings.TrimLeft(arr[len(arr)-1], sep)
+		labelList = append(labelList, pre)
+		labelSet[pre] = ""
+	}
+	fqName := prometheus.BuildFQName(namespace, subName, name)
+	metricDesc := prometheus.NewDesc(fqName, "metric Path by - "+mPath, labelList, nil)
+
+	return MetricSet{
+		metricDesc: metricDesc,
+		labelSet:   labelSet,
+	}
+}

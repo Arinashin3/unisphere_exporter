@@ -59,9 +59,9 @@ func NewClient(tgt string, mod string, logger *slog.Logger) (*UnisphereClient, b
 }
 
 func (uc *UnisphereClient) tryLogin() bool {
+	uc.url.Scheme = "http"
 	tgt := uc.url
 	tgt.Path = "/api/types/user/instances"
-	tgt.Scheme = "http"
 	req, err := http.NewRequest("GET", tgt.String(), nil)
 	if err != nil {
 		uc.Logger.Error("Login Failed", "error", err)
@@ -82,6 +82,7 @@ func (uc *UnisphereClient) tryLogin() bool {
 	return true
 }
 
+// Load Config file's module
 func SetModule(cfgFile *string, logger *slog.Logger) {
 	cfg, err := os.ReadFile(*cfgFile)
 	if err != nil {
@@ -152,7 +153,6 @@ func (uc *UnisphereClient) Get(path string, query string) []byte {
 	tgt := uc.url
 	tgt.Path = path
 	tgt.RawQuery = query
-	tgt.Scheme = "http"
 	req, err := http.NewRequest("GET", tgt.String(), nil)
 	if err != nil {
 		uc.Logger.Error("Login Failed", "error", err)
