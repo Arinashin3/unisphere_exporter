@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strconv"
 	"unisphere_exporter/types"
 )
 
@@ -46,7 +45,7 @@ func (uc *UnisphereClient) PostMetricRealTimeQuery(metricPath []string, interval
 
 func (uc *UnisphereClient) GetMetricRealTimeQueryResult(qid int64) []byte {
 	uc.url.Path = "/api/types/metricQueryResult/instances.json"
-	uc.url.RawQuery = "queryId EQ " + strconv.FormatInt(qid, 10)
+	//uc.url.RawQuery = "queryId EQ " + strconv.FormatInt(qid, 10)
 	req, err := http.NewRequest("GET", uc.url.String(), nil)
 	if err != nil {
 		uc.Logger.Error("Failed create NewRequest", "error_msg", err)
@@ -58,13 +57,10 @@ func (uc *UnisphereClient) GetMetricRealTimeQueryResult(qid int64) []byte {
 		return nil
 	}
 
-	var jData types.MetricRealTimeQueryResult
 	body, err := io.ReadAll(resp.Body)
-	if json.Unmarshal(body, &jData) != nil {
-		uc.Logger.Error("Unmarshalling Error", "path", uc.url.Path)
+	if err != nil {
+		uc.Logger.Error("Unmarshalling Error", "error_msg", err)
 		return nil
 	}
-	qid = jData
-	return qid
-
+	return body
 }

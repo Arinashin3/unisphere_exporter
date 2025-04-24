@@ -15,7 +15,7 @@ type MetricRealTimeQueryResponse struct {
 type MetricQueryEntries struct {
 	Entries []struct {
 		Content struct {
-			Id        int64                  `json:"id"`
+			QueryId   int64                  `json:"queryId"`
 			Path      string                 `json:"path"`
 			Timestamp string                 `json:"timestamp"`
 			Values    map[string]interface{} `json:"values"`
