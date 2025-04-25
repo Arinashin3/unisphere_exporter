@@ -1,9 +1,9 @@
 modules:
-  - module_name: "test"
+  test:
     user: "administrator"
     password: "P@ssw0rd"
     insecure: true
-  - module_name: "test2"
+  test2:
     user: "root"
     password: "P@ss"
     insecure: false

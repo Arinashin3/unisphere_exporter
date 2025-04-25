@@ -7,7 +7,6 @@ import (
 	"encoding/base64"
 	"gopkg.in/yaml.v3"
 	"io"
-	"log"
 	"log/slog"
 	"net/http"
 	"net/http/cookiejar"
@@ -17,13 +16,13 @@ import (
 )
 
 type Targets struct {
-	ModuleName string `yaml:"module_name"`
-	User       string `yaml:"user"`
-	Password   string `yaml:"password"`
-	SkipSsl    bool   `yaml:"skip_ssl,omitempty"`
-	SslVerify  bool   `yaml:"ssl_verify,omitempty"`
-	Cert       string `yaml:"cert,omitempty"`
-	Timeout    string `yaml:"timeout,omitempty"`
+	User      string `yaml:"user"`
+	Password  string `yaml:"password"`
+	SkipSsl   bool   `yaml:"skip_ssl,omitempty"`
+	SslVerify bool   `yaml:"ssl_verify,omitempty"`
+	Cert      string `yaml:"cert,omitempty"`
+	Timeout   string `yaml:"timeout,omitempty"`
+	loaded    bool   `yaml:"loaded,omitempty"`
 }
 
 type UnisphereClient struct {
@@ -40,26 +39,26 @@ type Modules struct {
 }
 
 type Configs struct {
-	Modules []Targets `yaml:"modules"`
+	Modules map[string]Targets `yaml:"modules"`
 }
 
 var (
-	cfgMap Configs
-	roots  *x509.CertPool
+	configMap Configs
+	roots     *x509.CertPool
 )
 
 func NewClient(tgt string, mod string, logger *slog.Logger) (*UnisphereClient, bool) {
 	var uc UnisphereClient
 	uc.url.Host = tgt
 	uc.Logger = logger
-	uc.searchModule(mod)
-	result := uc.tryLogin()
-
-	return &uc, result
+	if !uc.searchModule(mod) {
+		return &uc, false
+	}
+	return &uc, uc.tryLogin()
 }
 
 func (uc *UnisphereClient) tryLogin() bool {
-	uc.url.Scheme = "http"
+	//uc.url.Scheme = "http"
 	tgt := uc.url
 	tgt.Path = "/api/types/user/instances"
 	req, err := http.NewRequest("GET", tgt.String(), nil)
@@ -82,41 +81,51 @@ func (uc *UnisphereClient) tryLogin() bool {
 	return true
 }
 
-// Load Config file's module
-func SetModule(cfgFile *string, logger *slog.Logger) {
+// SetModules will Read Config file's module
+func SetModules(cfgFile *string, logger *slog.Logger) bool {
+	var result bool
 	cfg, err := os.ReadFile(*cfgFile)
+	cfgMap := &configMap
+	cfgMap.Modules = make(map[string]Targets)
 	if err != nil {
 		logger.Error("Failed to read Config File: %v", cfgFile)
 	}
 	if yaml.Unmarshal(cfg, &cfgMap) != nil {
-		log.Fatalf("Failed to Unmarshal Config File: %v", err)
+		logger.Error("Failed to Unmarshal Config File: %v", err)
+		return result
 	}
 
 	roots, err = x509.SystemCertPool()
 	if err != nil {
 		logger.Error("Unable to fetch system CA store.")
+		return result
 	}
 
-	for i, v := range cfgMap.Modules {
+	for k, v := range cfgMap.Modules {
 		if v.Cert != "" {
 			certs, err := os.ReadFile(v.Cert)
 			if err != nil {
-				logger.Error("Failed to read extra CA file.", "cert_file", v.Cert)
+				logger.Error("Failed to read extra CA file.", "module", k)
+				continue
 			}
 			if !roots.AppendCertsFromPEM(certs) {
-				logger.Error("Failed to append certs from PEM, unknown error.", "error", err)
+				logger.Error("Failed to append certs from PEM, unknown error.", "module", k)
+				continue
 			}
-
 		}
 		if v.Timeout == "" {
-			cfgMap.Modules[i].Timeout = "10s"
+			v.Timeout = "10s"
 		}
-
+		v.loaded = true
+		cfgMap.Modules[k] = v
 	}
-	logger.Info("Loaded API Credentials", "api_count", len(cfgMap.Modules))
+	logger.Info("Loaded Credentials Modules", "api_count", len(cfgMap.Modules))
+	result = true
+	return result
 }
 
-func (uc *UnisphereClient) getConfig(cfg Targets) bool {
+// The getModule function fetches authentication information with keys that match the module.
+func (uc *UnisphereClient) getModule(cfg Targets) bool {
 	var result bool
 	uc.auth = base64.StdEncoding.EncodeToString([]byte(cfg.User + ":" + cfg.Password))
 
@@ -130,23 +139,25 @@ func (uc *UnisphereClient) getConfig(cfg Targets) bool {
 	to, err := time.ParseDuration(cfg.Timeout)
 	if err != nil {
 		uc.Logger.Error("Failed Parse the timeout", "timeduration", cfg.Timeout)
+		return result
 	}
 	uc.hc = &http.Client{
 		Transport: &http.Transport{TLSClientConfig: tc},
 		Timeout:   to,
 	}
 
+	result = true
 	return result
 }
 
 func (uc *UnisphereClient) searchModule(module string) bool {
-	for _, v := range cfgMap.Modules {
-		if v.ModuleName == module {
-			return uc.getConfig(v)
-		}
+	cfg := configMap.Modules[module]
+	if !cfg.loaded {
+		uc.Logger.Error("Unknown Module", "module", module)
+		return false
 	}
-	uc.Logger.Error("Failed Search Module at Config File.", "module", module)
-	return false
+
+	return uc.getModule(cfg)
 }
 
 func (uc *UnisphereClient) Get(path string, query string) []byte {
@@ -181,7 +192,6 @@ func (uc *UnisphereClient) GetMetricQuery(path string, query string) []byte {
 	tgt := uc.url
 	tgt.Path = path
 	tgt.RawQuery = query
-	tgt.Scheme = "http"
 	req, err := http.NewRequest("GET", tgt.String(), nil)
 	if err != nil {
 		uc.Logger.Error("Login Failed", "error", err)

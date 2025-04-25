@@ -6,7 +6,7 @@ func init() {
 
 func NewMetricFCCollector() (string, Collector) {
 	var m MetricCollector
-	m.subName = "realtime_fc"
+	m.subName = "realtime"
 	m.metricPath = []string{
 		"sp.*.fibreChannel.fePort.*.readBlocks",
 		"sp.*.fibreChannel.fePort.*.readBytesRate",

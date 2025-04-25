@@ -69,13 +69,18 @@ func makeDesc(subName string, mPath string) MetricSet {
 	}
 }
 
-func (c *MetricCollector) ValuesToMetrics(entries *types.MetricQueryEntries, ch chan<- prometheus.Metric) float64 {
+func (c *MetricCollector) GenerateEntries(entries *types.MetricQueryEntries, ch chan<- prometheus.Metric) float64 {
 	var result float64
 	var f float64
 	var push bool
 	var err error
 	for _, entry := range entries.Entries {
 		content := entry.Content
+		// Check to exist metricList
+		if c.metricList[content.Path].metricDesc == nil {
+			c.logger.Warn("cannot search the metric desc", "metric_path", content.Path)
+			continue
+		}
 		for k1, v1 := range content.Values {
 			v1type := reflect.TypeOf(v1).String()
 			if strings.Contains(v1type, "interface") {
@@ -104,7 +109,6 @@ func (c *MetricCollector) ValuesToMetrics(entries *types.MetricQueryEntries, ch 
 				push = true
 				if strings.Contains(v1type, "int") {
 					f = float64(reflect.ValueOf(v1).Int())
-
 				} else if strings.Contains(v1type, "float") {
 					f = reflect.ValueOf(v1).Float()
 				} else if strings.Contains(v1type, "string") {
@@ -125,7 +129,7 @@ func (c *MetricCollector) ValuesToMetrics(entries *types.MetricQueryEntries, ch 
 
 func (c *MetricCollector) Update(uc *client.UnisphereClient, ch chan<- prometheus.Metric) float64 {
 	var result float64
-	var mq types.MetricQueryEntries
+	var entries types.MetricQueryEntries
 	c.logger = uc.Logger
 
 	qid := uc.PostMetricRealTimeQuery(c.metricPath, 60)
@@ -134,10 +138,10 @@ func (c *MetricCollector) Update(uc *client.UnisphereClient, ch chan<- prometheu
 	}
 
 	data := uc.GetMetricRealTimeQueryResult(qid)
-	err := json.Unmarshal(data, &mq)
+	err := json.Unmarshal(data, &entries)
 	if err != nil {
 		uc.Logger.Error("Unmarshalling Error", "error_msg", err)
 	}
-	result = c.ValuesToMetrics(&mq, ch)
+	result = c.GenerateEntries(&entries, ch)
 	return result
 }

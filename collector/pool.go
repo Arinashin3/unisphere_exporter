@@ -21,7 +21,7 @@ type PoolCollector struct {
 
 func NewPoolCollector() (string, Collector) {
 	subName := "pool"
-	path := "/api/types/pool/instances.json"
+	path := "/api/types/pool/instances"
 	labels := []string{"id", "name"}
 
 	return subName, &PoolCollector{

@@ -29,7 +29,7 @@ func main() {
 
 	logger := promslog.New(promslogConfig)
 	logger.Info("Starting unisphere_exporter", "version", version.Info())
-	logger.Info("Build contex", "build_context", version.BuildContext())
+	logger.Info("Build context", "build_context", version.BuildContext())
 
 	if u, err := user.Current(); err == nil && u.Uid == "0" {
 		logger.Warn("Unisphere Exporter is running as root user. This exporter is designed to run as unprivileged user, root is not required.")
@@ -37,7 +37,7 @@ func main() {
 	runtime.GOMAXPROCS(*maxProcs)
 	logger.Debug("Go MAXPROCS", "procs", runtime.GOMAXPROCS(0))
 
-	client.SetModule(configFile, logger)
+	client.SetModules(configFile, logger)
 
 	logger.Info("Unisphere exporter running.", "listen_port", *listen)
 	http.Handle("/metrics", promhttp.Handler())

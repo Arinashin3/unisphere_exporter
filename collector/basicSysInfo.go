@@ -18,7 +18,7 @@ type BasicSystemCollector struct {
 
 func NewBasicSystemCollector() (string, Collector) {
 	subName := "basicsystem"
-	path := "/api/types/basicSystemInfo/instances.json"
+	path := "/api/types/basicSystemInfo/instances"
 	labels := []string{"id", "model", "sw_ver", "api_ver"}
 	return subName, &BasicSystemCollector{
 		path:     path,
