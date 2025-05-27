@@ -33,18 +33,16 @@ type UnisphereCollectorSt struct {
 
 var UnisphereCollector UnisphereCollectorSt
 
-func Probe(w http.ResponseWriter, r *http.Request, logger *slog.Logger, reg *prometheus.Registry) {
+func Probe(w *http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 	params := r.URL.Query()
 	target := params.Get("target")
 	module := params.Get("module")
 
 	if target == "" {
-		http.Error(w, "Target parameter missing or empty", http.StatusBadRequest)
-		logger.Error("Target parameter missing or empty.")
+		logger.Error("Target parameter is empty.")
 		return
 	} else if module == "" {
-		http.Error(w, "Target parameter missing or empty", http.StatusBadRequest)
-		logger.Error("Module parameter missing or empty.")
+		logger.Error("Module parameter is empty.")
 		return
 	}
 
@@ -52,13 +50,13 @@ func Probe(w http.ResponseWriter, r *http.Request, logger *slog.Logger, reg *pro
 	if !connected {
 		return
 	}
-
+	reg := prometheus.NewRegistry()
 	c := &UnisphereCollector
 	c.Client = uc
 	reg.MustRegister(c)
 
 	h := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
-	h.ServeHTTP(w, r)
+	h.ServeHTTP(*w, r)
 
 }
 

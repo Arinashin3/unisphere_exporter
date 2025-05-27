@@ -2,7 +2,6 @@ package main
 
 import (
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/prometheus/client_golang/prometheus"
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promslog"
 	"github.com/prometheus/common/promslog/flag"
@@ -42,10 +41,10 @@ func main() {
 	logger.Info("Unisphere exporter running.", "listen_port", *listen)
 	http.Handle("/metrics", promhttp.Handler())
 	http.HandleFunc("/probe", func(w http.ResponseWriter, r *http.Request) {
-		reg := prometheus.NewRegistry()
-		collector.Probe(w, r, logger, reg)
+		collector.Probe(&w, r, logger)
 	})
 
-	http.ListenAndServe(*listen, nil)
+	go http.ListenAndServe(*listen, nil)
+	select {}
 
 }

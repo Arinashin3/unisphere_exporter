@@ -3,6 +3,8 @@ package collector
 import (
 	"encoding/json"
 	"github.com/prometheus/client_golang/prometheus"
+	"reflect"
+	"strings"
 	"unisphere_exporter/client"
 	"unisphere_exporter/types"
 )
@@ -12,60 +14,61 @@ func init() {
 }
 
 type PoolCollector struct {
-	path          string
-	raidTypeDesc  *prometheus.Desc
-	sizeFreeDesc  *prometheus.Desc
-	sizeTotalDesc *prometheus.Desc
-	sizeUsedDesc  *prometheus.Desc
+	apiPath        string
+	requiredFields []string
+	compact        bool
+	content        types.PoolContent
+	descList       map[string]*prometheus.Desc
 }
 
 func NewPoolCollector() (string, Collector) {
 	subName := "pool"
-	path := "/api/types/pool/instances"
 	labels := []string{"id", "name"}
+	var c PoolCollector
 
-	return subName, &PoolCollector{
-		path: path,
-		raidTypeDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, subName, "raidtype"),
-			"RAID group types or RAID levels. | 0:none, 1:raid5, 2:raid0, 3:raid1, 4:raid3, 7:raid10 ,10:raid6 ,12:mixed 48879:automatic.",
-			labels, nil,
-		),
-		sizeFreeDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, subName, "size_free"),
-			"Size of free space available in the pool.",
-			labels, nil,
-		),
-		sizeTotalDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, subName, "size_total"),
-			"The total size of space from the pool, which will be the sum of sizeFree, sizeUsed and size Preallocated space.",
-			labels, nil,
-		),
-		sizeUsedDesc: prometheus.NewDesc(
-			prometheus.BuildFQName(namespace, subName, "size_used"),
-			"Space allocated from the pool by storage resources, used for storing data. This will be the sum of the sizeAllocated values of each storage resource in the pool.",
-			labels, nil,
-		),
+	c.apiPath = "/api/types/pool/instances"
+	c.descList = make(map[string]*prometheus.Desc)
+	c.compact = true
+
+	for _, field := range reflect.VisibleFields(reflect.TypeOf(c.content)) {
+		fType := field.Type.String()
+		fName := strings.Trim(string(field.Tag), "json:")
+		fName = strings.Trim(fName, "\"")
+		if fType != "string" {
+			c.descList[field.Name] = prometheus.NewDesc(
+				prometheus.BuildFQName(namespace, subName, fName),
+				fName+" metric",
+				labels, nil,
+			)
+		}
+		c.requiredFields = append(c.requiredFields, fName)
 	}
+
+	return subName, &c
 }
 
 func (c *PoolCollector) Update(uc *client.UnisphereClient, ch chan<- prometheus.Metric) float64 {
 	var jData types.PoolEntries
 	var result float64
-	resp := uc.Get(c.path, "compact=true")
+
+	query := "fields=" + strings.Join(c.requiredFields, ",")
+	if c.compact {
+		query += "&compact=true"
+	}
+	resp := uc.Get(c.apiPath, query)
 	if resp == nil {
 		return result
 	}
 	if json.Unmarshal(resp, &jData) != nil {
-		uc.Logger.Error("Unmarshalling Error", "path", c.path)
+		uc.Logger.Error("Unmarshalling Error", "path", c.apiPath)
 		return result
 	}
 	for _, entries := range jData.Entries {
 		d := entries.Content
-		ch <- prometheus.MustNewConstMetric(c.raidTypeDesc, prometheus.GaugeValue, float64(d.RaidType), d.ID, d.Name)
-		ch <- prometheus.MustNewConstMetric(c.sizeFreeDesc, prometheus.GaugeValue, float64(d.SizeFree), d.ID, d.Name)
-		ch <- prometheus.MustNewConstMetric(c.sizeTotalDesc, prometheus.GaugeValue, float64(d.SizeTotal), d.ID, d.Name)
-		ch <- prometheus.MustNewConstMetric(c.sizeUsedDesc, prometheus.GaugeValue, float64(d.SizeUsed), d.ID, d.Name)
+		ch <- prometheus.MustNewConstMetric(c.descList["RaidType"], prometheus.GaugeValue, float64(d.RaidType), d.ID, d.Name)
+		ch <- prometheus.MustNewConstMetric(c.descList["SizeFree"], prometheus.GaugeValue, float64(d.SizeFree), d.ID, d.Name)
+		ch <- prometheus.MustNewConstMetric(c.descList["SizeTotal"], prometheus.GaugeValue, float64(d.SizeTotal), d.ID, d.Name)
+		ch <- prometheus.MustNewConstMetric(c.descList["SizeUsed"], prometheus.GaugeValue, float64(d.SizeUsed), d.ID, d.Name)
 	}
 
 	result = 1.0

@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"io"
 	"net/http"
-	"strconv"
 	"unisphere_exporter/types"
 )
 
@@ -50,10 +49,41 @@ func (uc *UnisphereClient) PostMetricRealTimeQuery(metricPath []string, interval
 
 }
 
+func (uc *UnisphereClient) QueryMetricValue(path string) []byte {
+	tgt := uc.url
+	tgt.Path = "/api/types/metricValue/instances"
+	tgt.RawQuery = "filter=path%20EQ%20" + "\"" + path + "\""
+	req, err := http.NewRequest("GET", tgt.String(), nil)
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("Authorization", "Basic "+uc.auth)
+	req.Header.Add("X-EMC-REST-CLIENT", "true")
+	if err != nil {
+		uc.Logger.Error("Failed create NewRequest", "error_msg", err)
+		return nil
+	}
+	resp, err := uc.hc.Do(req)
+	body, err := io.ReadAll(resp.Body)
+	if err != nil {
+		uc.Logger.Error("Request Error", "error_msg", err)
+		return nil
+	}
+	if resp.StatusCode == 400 {
+		uc.Logger.Error("Request Error", "error_msg", err)
+		return nil
+	}
+
+	if err != nil {
+		uc.Logger.Error("Unmarshalling Error", "error_msg", err)
+		return nil
+	}
+	return body
+}
+
 func (uc *UnisphereClient) GetMetricRealTimeQueryResult(qid int64) []byte {
 	tgt := uc.url
 	tgt.Path = "/api/types/metricQueryResult/instances"
-	tgt.RawQuery = "queryId EQ " + strconv.FormatInt(qid, 10)
+	tgt.RawQuery = "filter=path%20EQ%20"
 	req, err := http.NewRequest("GET", tgt.String(), nil)
 	req.Header.Add("Accept", "application/json")
 	req.Header.Add("Content-Type", "application/json")
@@ -65,6 +95,10 @@ func (uc *UnisphereClient) GetMetricRealTimeQueryResult(qid int64) []byte {
 	}
 	resp, err := uc.hc.Do(req)
 	if err != nil {
+		uc.Logger.Error("Request Error", "error_msg", err)
+		return nil
+	}
+	if resp.StatusCode == 400 {
 		uc.Logger.Error("Request Error", "error_msg", err)
 		return nil
 	}

@@ -1,7 +1,7 @@
 modules:
   test:
-    user: "administrator"
-    password: "P@ssw0rd"
+    user: "admin"
+    password: "Passw0rd1!"
     insecure: true
   test2:
     user: "root"

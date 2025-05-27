@@ -1,8 +1,8 @@
 package collector
 
-func init() {
-	NewCollector(NewMetricPoolCollector())
-}
+//func init() {
+//	NewCollector(NewMetricPoolCollector())
+//}
 
 func NewMetricPoolCollector() (string, Collector) {
 	var m MetricCollector

@@ -7,6 +7,7 @@ import (
 	"reflect"
 	"strconv"
 	"strings"
+	"sync"
 	"unisphere_exporter/client"
 	"unisphere_exporter/types"
 )
@@ -74,53 +75,55 @@ func (c *MetricCollector) GenerateEntries(entries *types.MetricQueryEntries, ch 
 	var f float64
 	var push bool
 	var err error
-	for _, entry := range entries.Entries {
-		content := entry.Content
-		// Check to exist metricList
-		if c.metricList[content.Path].metricDesc == nil {
-			c.logger.Warn("cannot search the metric desc", "metric_path", content.Path)
-			continue
-		}
-		for k1, v1 := range content.Values {
-			v1type := reflect.TypeOf(v1).String()
-			if strings.Contains(v1type, "interface") {
-				for k2, v2 := range v1.(map[string]interface{}) {
-					push = true
-					v2type := reflect.TypeOf(v2).String()
-					if strings.Contains(v2type, "interface") {
-						c.logger.Error("parsing error - interface")
-						push = false
-					} else if strings.Contains(v2type, "int") {
-						f = float64(reflect.ValueOf(v2).Int())
-					} else if strings.Contains(v2type, "float") {
-						f = reflect.ValueOf(v2).Float()
-					} else if strings.Contains(v2type, "string") {
-						f, err = strconv.ParseFloat(reflect.ValueOf(v2).String(), 64)
-						if err != nil {
-							c.logger.Error("parsing error - string")
-							push = false
-						}
-					}
-					if push {
-						ch <- prometheus.MustNewConstMetric(c.metricList[content.Path].metricDesc, prometheus.GaugeValue, f, k1, k2)
-					}
-				}
-			} else {
+	if entries.Entries == nil {
+		return result
+	}
+	entry := entries.Entries[0]
+	content := entry.Content
+	// Check to exist metricList
+	if c.metricList[content.Path].metricDesc == nil {
+		c.logger.Warn("cannot search the metric desc", "metric_path", content.Path)
+		//continue
+	}
+	for k1, v1 := range content.Values {
+		v1type := reflect.TypeOf(v1).String()
+		if strings.Contains(v1type, "interface") {
+			for k2, v2 := range v1.(map[string]interface{}) {
 				push = true
-				if strings.Contains(v1type, "int") {
-					f = float64(reflect.ValueOf(v1).Int())
-				} else if strings.Contains(v1type, "float") {
-					f = reflect.ValueOf(v1).Float()
-				} else if strings.Contains(v1type, "string") {
-					f, err = strconv.ParseFloat(reflect.ValueOf(v1).String(), 64)
+				v2type := reflect.TypeOf(v2).String()
+				if strings.Contains(v2type, "interface") {
+					c.logger.Error("parsing error - interface")
+					push = false
+				} else if strings.Contains(v2type, "int") {
+					f = float64(reflect.ValueOf(v2).Int())
+				} else if strings.Contains(v2type, "float") {
+					f = reflect.ValueOf(v2).Float()
+				} else if strings.Contains(v2type, "string") {
+					f, err = strconv.ParseFloat(reflect.ValueOf(v2).String(), 64)
 					if err != nil {
 						c.logger.Error("parsing error - string")
 						push = false
 					}
 				}
 				if push {
-					ch <- prometheus.MustNewConstMetric(c.metricList[content.Path].metricDesc, prometheus.GaugeValue, f, k1)
+					ch <- prometheus.MustNewConstMetric(c.metricList[content.Path].metricDesc, prometheus.GaugeValue, f, k1, k2)
 				}
+			}
+		} else {
+			push = true
+			if strings.Contains(v1type, "int") {
+				f = float64(reflect.ValueOf(v1).Int())
+			} else if strings.Contains(v1type, "float") {
+				f = reflect.ValueOf(v1).Float()
+			} else if strings.Contains(v1type, "string") {
+				f, err = strconv.ParseFloat(reflect.ValueOf(v1).String(), 64)
+				if err != nil {
+					c.logger.Error("parsing error - string")
+					push = false
+				}
+			}
+			if push {
+				ch <- prometheus.MustNewConstMetric(c.metricList[content.Path].metricDesc, prometheus.GaugeValue, f, k1)
 			}
 		}
 	}
@@ -131,17 +134,33 @@ func (c *MetricCollector) Update(uc *client.UnisphereClient, ch chan<- prometheu
 	var result float64
 	var entries types.MetricQueryEntries
 	c.logger = uc.Logger
+	//qid := uc.PostMetricRealTimeQuery(c.metricPath, 60)
+	//if qid == 0 {
+	//	return result
+	//}
 
-	qid := uc.PostMetricRealTimeQuery(c.metricPath, 60)
-	if qid == 0 {
-		return result
+	var wg sync.WaitGroup
+	wg.Add(len(c.metricPath))
+	for _, path := range c.metricPath {
+		go func() {
+			defer wg.Done()
+			data := uc.QueryMetricValue(path)
+			err := json.Unmarshal(data, &entries)
+			if err != nil {
+				uc.Logger.Error("Unmarshalling Error", "error_msg", err)
+			}
+			result = c.GenerateEntries(&entries, ch)
+		}()
 	}
+	wg.Wait()
 
-	data := uc.GetMetricRealTimeQueryResult(qid)
-	err := json.Unmarshal(data, &entries)
-	if err != nil {
-		uc.Logger.Error("Unmarshalling Error", "error_msg", err)
-	}
-	result = c.GenerateEntries(&entries, ch)
+	//	data := uc.GetMetricRealTimeQueryResult(0)
+	//err := json.Unmarshal(data, &entries)
+	//if err != nil {
+	//uc.Logger.Error("Unmarshalling Error", "error_msg", err)
+	//return result
+	//}
+	//result = c.GenerateEntries(&entries, ch)
+	result = 1.0
 	return result
 }
