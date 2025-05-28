@@ -10,9 +10,9 @@ import (
 	"unisphere_exporter/client"
 )
 
-const namespace = "unisphere"
+const Namespace = "unisphere"
 
-type collectorSt struct {
+type CollectSt struct {
 	subName    string
 	apiPath    string
 	labels     []string
@@ -38,20 +38,21 @@ func Probe(w *http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 	}
 	reg := prometheus.NewRegistry()
 	var wg sync.WaitGroup
-	wg.Add(6)
+	wg.Add(7)
 	go collectBasicSystemInfo(uc, reg, &wg)
 	go collectPool(uc, reg, &wg)
 	go collectSystemCapacity(uc, reg, &wg)
 	go collectMetricFC(uc, reg, &wg)
 	go collectMetricGlobal(uc, reg, &wg)
 	go collectMetricLun(uc, reg, &wg)
+	go collectLun(uc, reg, &wg)
 	wg.Wait()
 	h := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 	h.ServeHTTP(*w, r)
 
 }
 
-func types2Float64(i reflect.Value) float64 {
+func Types2Float64(i reflect.Value) float64 {
 	switch i.Type().String() {
 	case "int":
 		return float64(i.Int())

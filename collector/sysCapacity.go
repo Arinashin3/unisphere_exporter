@@ -13,7 +13,7 @@ import (
 func collectSystemCapacity(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) float64 {
 	defer wg.Done()
 	var result float64
-	var cols collectorSt
+	var cols CollectSt
 	var requiredFields []string
 	cols.subName = "syscap"
 	cols.apiPath = "/api/types/systemCapacity/instances"
@@ -27,7 +27,7 @@ func collectSystemCapacity(uc *client.UnisphereClient, reg *prometheus.Registry,
 		fName = strings.Trim(fName, "\"")
 		requiredFields = append(requiredFields, fName)
 		if fType != "string" {
-			cols.metricList[f.Name] = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: namespace, Subsystem: cols.subName, Name: f.Name}, cols.labels)
+			cols.metricList[f.Name] = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: Namespace, Subsystem: cols.subName, Name: f.Name}, cols.labels)
 		}
 	}
 	query := "fields=" + strings.Join(requiredFields, ",")
@@ -52,7 +52,7 @@ func collectSystemCapacity(uc *client.UnisphereClient, reg *prometheus.Registry,
 	content := jData.Entries[0].Content
 	for k, _ := range cols.metricList {
 		v := reflect.ValueOf(content).FieldByName(k)
-		cols.metricList[k].WithLabelValues().Set(types2Float64(v))
+		cols.metricList[k].WithLabelValues().Set(Types2Float64(v))
 	}
 
 	result = 1.0

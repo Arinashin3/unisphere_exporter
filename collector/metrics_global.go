@@ -8,7 +8,7 @@ import (
 
 func collectMetricGlobal(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) bool {
 	defer wg.Done()
-	var cols collectorSt
+	var cols CollectSt
 	cols.subName = "global"
 	cols.apiPath = "/api/types/metricValue/instances"
 

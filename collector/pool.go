@@ -13,7 +13,7 @@ import (
 func collectPool(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) float64 {
 	defer wg.Done()
 	var result float64
-	var cols collectorSt
+	var cols CollectSt
 	cols.subName = "pool"
 	cols.apiPath = "/api/types/pool/instances"
 	cols.metricList = make(map[string]*prometheus.GaugeVec)
@@ -27,7 +27,7 @@ func collectPool(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.
 		fName := strings.Trim(string(f.Tag), "json:")
 		fName = strings.Trim(fName, "\"")
 		if fType != "string" {
-			cols.metricList[f.Name] = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: namespace, Subsystem: cols.subName, Name: f.Name}, cols.labels)
+			cols.metricList[f.Name] = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: Namespace, Subsystem: cols.subName, Name: f.Name}, cols.labels)
 		}
 	}
 
@@ -50,7 +50,7 @@ func collectPool(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.
 	content := jData.Entries[0].Content
 	for k, _ := range cols.metricList {
 		v := reflect.ValueOf(content).FieldByName(k)
-		cols.metricList[k].WithLabelValues(content.ID, content.Name).Set(types2Float64(v))
+		cols.metricList[k].WithLabelValues(content.ID, content.Name).Set(Types2Float64(v))
 	}
 
 	result = 1.0

@@ -9,7 +9,7 @@ import (
 	"unisphere_exporter/types"
 )
 
-func (cols *collectorSt) getMetric(uc *client.UnisphereClient, reg *prometheus.Registry) {
+func (cols *CollectSt) getMetric(uc *client.UnisphereClient, reg *prometheus.Registry) {
 
 	for k, _ := range cols.metricList {
 		var jData types.MetricQueryEntries
@@ -31,7 +31,7 @@ func (cols *collectorSt) getMetric(uc *client.UnisphereClient, reg *prometheus.R
 	}
 }
 
-func (cols *collectorSt) convMetric2GaugeVec(metrics []string) bool {
+func (cols *CollectSt) convMetric2GaugeVec(metrics []string) bool {
 
 	cols.metricList = make(map[string]*prometheus.GaugeVec)
 
@@ -63,7 +63,7 @@ func (cols *collectorSt) convMetric2GaugeVec(metrics []string) bool {
 
 		}
 
-		cols.metricList[path] = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: namespace, Subsystem: cols.subName, Name: name}, labels)
+		cols.metricList[path] = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: Namespace, Subsystem: cols.subName, Name: name}, labels)
 
 	}
 	return true
@@ -86,7 +86,7 @@ func convValue2Float64(value reflect.Value) float64 {
 
 }
 
-func (cols *collectorSt) generateMetrics(path string, value map[string]interface{}) bool {
+func (cols *CollectSt) generateMetrics(path string, value map[string]interface{}) bool {
 	var result bool
 
 	for k1, v1 := range value {

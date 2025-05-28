@@ -8,20 +8,16 @@ import (
 	"unisphere_exporter/types"
 )
 
-//func init() {
-//	NewCollector(NewBasicSystemCollector())
-//}
-
 func collectBasicSystemInfo(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) float64 {
 	defer wg.Done()
 
 	var result float64
-	var cols collectorSt
+	var cols CollectSt
 	cols.subName = "basicsystem"
 	cols.apiPath = "/api/types/basicSystemInfo/instances"
 	cols.labels = []string{"model", "sw_ver", "api_ver"}
 	cols.metricList = make(map[string]*prometheus.GaugeVec)
-	cols.metricList["info"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: namespace, Subsystem: cols.subName, Name: "info", Help: ""}, cols.labels)
+	cols.metricList["info"] = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: Namespace, Subsystem: cols.subName, Name: "info", Help: ""}, cols.labels)
 
 	for k, _ := range cols.metricList {
 		reg.MustRegister(cols.metricList[k])
