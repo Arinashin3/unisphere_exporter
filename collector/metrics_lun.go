@@ -1,13 +1,18 @@
 package collector
 
-func init() {
-	NewCollector(NewMetricLunCollector())
-}
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"sync"
+	"unisphere_exporter/client"
+)
 
-func NewMetricLunCollector() (string, Collector) {
-	var m MetricCollector
-	m.subName = "lun"
-	m.metricPath = []string{
+func collectMetricLun(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) bool {
+	defer wg.Done()
+	var cols collectorSt
+	cols.subName = "lun"
+	cols.apiPath = "/api/types/metricValue/instances"
+
+	metrics := []string{
 		"sp.*.storage.lun.*.readBytesRate",
 		"sp.*.storage.lun.*.readsRate",
 		"sp.*.storage.lun.*.writeBytesRate",
@@ -16,7 +21,8 @@ func NewMetricLunCollector() (string, Collector) {
 		"sp.*.storage.lun.*.responseTime",
 	}
 
-	m.GenerateCollector()
+	cols.convMetric2GaugeVec(metrics)
+	cols.getMetric(uc, reg)
 
-	return m.subName, &m
+	return true
 }

@@ -1,20 +1,26 @@
 package collector
 
-func init() {
-	NewCollector(NewMetricGlobalCollector())
-}
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"sync"
+	"unisphere_exporter/client"
+)
 
-func NewMetricGlobalCollector() (string, Collector) {
-	var m MetricCollector
-	m.subName = "global"
-	m.metricPath = []string{
+func collectMetricGlobal(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) bool {
+	defer wg.Done()
+	var cols collectorSt
+	cols.subName = "global"
+	cols.apiPath = "/api/types/metricValue/instances"
+
+	metrics := []string{
 		"sp.*.cpu.summary.utilization",
 		"sp.*.blockCache.global.summary.dirtyBytes",
 		"sp.*.net.basic.inBytesRate",
 		"sp.*.net.basic.outBytesRate",
 	}
 
-	m.GenerateCollector()
+	cols.convMetric2GaugeVec(metrics)
+	cols.getMetric(uc, reg)
 
-	return m.subName, &m
+	return true
 }

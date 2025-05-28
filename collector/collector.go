@@ -5,33 +5,19 @@ import (
 	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"log/slog"
 	"net/http"
-	"time"
+	"reflect"
+	"sync"
 	"unisphere_exporter/client"
 )
 
 const namespace = "unisphere"
 
-var (
-	scrapeDurationDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "scrape", "collector_duration_seconds"),
-		"unisphere_exporter: Duration of a collector scrape.",
-		[]string{"collector"},
-		nil,
-	)
-	scrapeSuccessDesc = prometheus.NewDesc(
-		prometheus.BuildFQName(namespace, "scrape", "collector_success"),
-		"unisphere_exporter: Whether a collector succeeded.",
-		[]string{"collector"},
-		nil,
-	)
-)
-
-type UnisphereCollectorSt struct {
-	Collectors map[string]Collector
-	Client     *client.UnisphereClient
+type collectorSt struct {
+	subName    string
+	apiPath    string
+	labels     []string
+	metricList map[string]*prometheus.GaugeVec
 }
-
-var UnisphereCollector UnisphereCollectorSt
 
 func Probe(w *http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 	params := r.URL.Query()
@@ -51,46 +37,32 @@ func Probe(w *http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 		return
 	}
 	reg := prometheus.NewRegistry()
-	c := &UnisphereCollector
-	c.Client = uc
-	reg.MustRegister(c)
-
+	var wg sync.WaitGroup
+	wg.Add(6)
+	go collectBasicSystemInfo(uc, reg, &wg)
+	go collectPool(uc, reg, &wg)
+	go collectSystemCapacity(uc, reg, &wg)
+	go collectMetricFC(uc, reg, &wg)
+	go collectMetricGlobal(uc, reg, &wg)
+	go collectMetricLun(uc, reg, &wg)
+	wg.Wait()
 	h := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 	h.ServeHTTP(*w, r)
 
 }
 
-type Collector interface {
-	Update(uc *client.UnisphereClient, ch chan<- prometheus.Metric) float64
-}
-
-func NewCollector(cName string, c Collector) *UnisphereCollectorSt {
-	u := &UnisphereCollector
-	if u.Collectors == nil {
-		u.Collectors = make(map[string]Collector)
+func types2Float64(i reflect.Value) float64 {
+	switch i.Type().String() {
+	case "int":
+		return float64(i.Int())
+	case "uint64":
+		return float64(i.Uint())
+	case "float64":
+		return i.Float()
+	case "bool":
+		if i.Bool() {
+			return 1.0
+		}
 	}
-	u.Collectors[cName] = c
-
-	return u
-}
-
-func (c *UnisphereCollectorSt) Describe(ch chan<- *prometheus.Desc) {
-	ch <- scrapeDurationDesc
-	ch <- scrapeSuccessDesc
-}
-func (c *UnisphereCollectorSt) Collect(ch chan<- prometheus.Metric) {
-	for cName, collector := range c.Collectors {
-		execute(cName, collector, c.Client, ch)
-	}
-}
-
-func execute(cName string, c Collector, uc *client.UnisphereClient, ch chan<- prometheus.Metric) {
-	start := time.Now()
-	success := c.Update(uc, ch)
-	duration := time.Since(start)
-	if success == 0.0 {
-		uc.Logger.Debug("Failed to Collect Metrics", "collector", cName)
-	}
-	ch <- prometheus.MustNewConstMetric(scrapeDurationDesc, 2, duration.Seconds(), cName)
-	ch <- prometheus.MustNewConstMetric(scrapeSuccessDesc, 2, success, cName)
+	return 0.0
 }

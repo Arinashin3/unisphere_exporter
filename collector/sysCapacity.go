@@ -5,82 +5,54 @@ import (
 	"github.com/prometheus/client_golang/prometheus"
 	"reflect"
 	"strings"
+	"sync"
 	"unisphere_exporter/client"
 	"unisphere_exporter/types"
 )
 
-func init() {
-	NewCollector(NewSysCapCollector())
-}
-
-type SysCapCollector struct {
-	apiPath        string
-	requiredFields []string
-	compact        bool
-	content        types.SysCapContent
-	descList       map[string]*prometheus.Desc
-}
-
-func NewSysCapCollector() (string, Collector) {
-	subName := "syscap"
-	labels := []string{"id"}
-	var c SysCapCollector
-
-	c.apiPath = "/api/types/systemCapacity/instances"
-	c.descList = make(map[string]*prometheus.Desc)
-	c.compact = true
-
-	for _, field := range reflect.VisibleFields(reflect.TypeOf(c.content)) {
-		fType := field.Type.String()
-		fName := strings.Trim(string(field.Tag), "json:")
-		fName = strings.Trim(fName, "\"")
-		if fType != "string" {
-			c.descList[field.Name] = prometheus.NewDesc(
-				prometheus.BuildFQName(namespace, subName, fName),
-				fName+" metric",
-				labels, nil,
-			)
-		}
-		c.requiredFields = append(c.requiredFields, fName)
-	}
-
-	return subName, &c
-}
-
-func (c *SysCapCollector) Update(uc *client.UnisphereClient, ch chan<- prometheus.Metric) float64 {
-	var jData types.SysCapEntries
+func collectSystemCapacity(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) float64 {
+	defer wg.Done()
 	var result float64
+	var cols collectorSt
+	var requiredFields []string
+	cols.subName = "syscap"
+	cols.apiPath = "/api/types/systemCapacity/instances"
+	cols.metricList = make(map[string]*prometheus.GaugeVec)
+	cols.labels = []string{}
 
-	query := "fields=" + strings.Join(c.requiredFields, ",")
-	if c.compact {
-		query += "&compact=true"
+	// 메트릭 리스트 생성
+	for _, f := range reflect.VisibleFields(reflect.TypeOf(types.SysCapContent{})) {
+		fType := f.Type.String()
+		fName := strings.Trim(string(f.Tag), "json:")
+		fName = strings.Trim(fName, "\"")
+		requiredFields = append(requiredFields, fName)
+		if fType != "string" {
+			cols.metricList[f.Name] = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: namespace, Subsystem: cols.subName, Name: f.Name}, cols.labels)
+		}
+	}
+	query := "fields=" + strings.Join(requiredFields, ",")
+	query += "&compact=true"
+
+	// Registry 등록
+	for k, _ := range cols.metricList {
+		reg.MustRegister(cols.metricList[k])
 	}
 
-	resp := uc.Get(c.apiPath, query)
-	if resp == nil {
-		return result
-	}
+	// Data 요청
+	var jData types.SysCapEntries
+	resp := uc.Get(cols.apiPath, query)
 	if json.Unmarshal(resp, &jData) != nil {
-		uc.Logger.Error("Unmarshalling Error", "path", c.apiPath)
+		uc.Logger.Error("Unmarshal Failed.", "subsystem", cols.subName)
 		return result
 	}
 	if jData.Entries == nil {
+		uc.Logger.Error("Contents is Null.", "subsystem", cols.subName)
 		return result
 	}
-	for _, content := range jData.Entries {
-		d := content.Content
-		ch <- prometheus.MustNewConstMetric(c.descList["SizeFree"], prometheus.GaugeValue, float64(d.SizeFree), d.ID)
-		ch <- prometheus.MustNewConstMetric(c.descList["SizeTotal"], prometheus.GaugeValue, float64(d.SizeTotal), d.ID)
-		ch <- prometheus.MustNewConstMetric(c.descList["SizeUsed"], prometheus.GaugeValue, float64(d.SizeUsed), d.ID)
-		ch <- prometheus.MustNewConstMetric(c.descList["SizePreallocated"], prometheus.GaugeValue, float64(d.SizePreallocated), d.ID)
-		ch <- prometheus.MustNewConstMetric(c.descList["DataReductionSizeSaved"], prometheus.GaugeValue, float64(d.DataReductionSizeSaved), d.ID)
-		ch <- prometheus.MustNewConstMetric(c.descList["DataReductionPercent"], prometheus.GaugeValue, float64(d.DataReductionPercent), d.ID)
-		ch <- prometheus.MustNewConstMetric(c.descList["DataReductionRatio"], prometheus.GaugeValue, float64(d.DataReductionRatio), d.ID)
-		ch <- prometheus.MustNewConstMetric(c.descList["TotalLogicalSize"], prometheus.GaugeValue, float64(d.TotalLogicalSize), d.ID)
-		//ch <- prometheus.MustNewConstMetric(c.descList["ThinSavingRatio"], prometheus.GaugeValue, float64(d.ThinSavingRatio), d.ID)
-		ch <- prometheus.MustNewConstMetric(c.descList["SnapsSavingsRatio"], prometheus.GaugeValue, float64(d.SnapsSavingsRatio), d.ID)
-		ch <- prometheus.MustNewConstMetric(c.descList["OverallEfficiencyRatio"], prometheus.GaugeValue, float64(d.OverallEfficiencyRatio), d.ID)
-
+	content := jData.Entries[0].Content
+	for k, _ := range cols.metricList {
+		v := reflect.ValueOf(content).FieldByName(k)
+		cols.metricList[k].WithLabelValues().Set(types2Float64(v))
 	}
 
 	result = 1.0

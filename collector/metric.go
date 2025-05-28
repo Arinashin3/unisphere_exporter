@@ -3,164 +3,113 @@ package collector
 import (
 	"encoding/json"
 	"github.com/prometheus/client_golang/prometheus"
-	"log/slog"
 	"reflect"
-	"strconv"
 	"strings"
-	"sync"
 	"unisphere_exporter/client"
 	"unisphere_exporter/types"
 )
 
-type MetricSet struct {
-	metricDesc *prometheus.Desc
-	labelSet   map[string]string
-}
+func (cols *collectorSt) getMetric(uc *client.UnisphereClient, reg *prometheus.Registry) {
 
-type MetricCollector struct {
-	subName    string
-	metricPath []string
-	metricList map[string]MetricSet
-	logger     *slog.Logger
-}
+	for k, _ := range cols.metricList {
+		var jData types.MetricQueryEntries
+		query := "filter=path%20EQ%20\"" + k + "\""
+		query += "&compact=true"
+		data := uc.Get(cols.apiPath, query)
+		if json.Unmarshal(data, &jData) != nil {
+			uc.Logger.Error("Unmarshal is Failed", "path", k)
+			continue
+		}
+		if jData.Entries == nil {
+			uc.Logger.Error("Entries is Null", "path", k)
+			continue
+		}
+		reg.MustRegister(cols.metricList[k])
 
-func (c *MetricCollector) GenerateCollector() {
-	mList := make(map[string]MetricSet)
-	for _, mPath := range c.metricPath {
-		mList[mPath] = makeDesc(c.subName, mPath)
+		cols.generateMetrics(k, jData.Entries[0].Content.Values)
+
 	}
-	c.metricList = mList
 }
 
-func makeDesc(subName string, mPath string) MetricSet {
-	name := strings.ToLower(mPath)
-	labelSet := make(map[string]string)
+func (cols *collectorSt) convMetric2GaugeVec(metrics []string) bool {
 
-	var labelList []string
-	var before string
-	var lastname string
-	arr := strings.Split(name, ".")
-	for i, v := range arr {
-		now := v
-		if now == "*" {
-			if !(before == "") && !(before == "*") {
-				labelList = append(labelList, before)
-				labelSet[before] = ""
+	cols.metricList = make(map[string]*prometheus.GaugeVec)
+
+	for _, path := range metrics {
+		var labels []string
+		var name string
+		arr := strings.Split(path, ".")
+		for i := 0; i < len(arr); i++ {
+			if i == 0 {
+				// 배열 첫번째인지 확인
+				continue
 			}
-		} else {
-			if !(before == "") && !(before == "*") {
-				if lastname == "" {
-					lastname = before
+			// 문자 * 인지 확인, 맞을 경우 라벨에 포함, 아닐경우 이전 값이 * 인지 확인해서 이름에 포함
+			if arr[i] == "*" {
+				labels = append(labels, arr[i-1])
+			} else if arr[i-1] != "*" {
+				if name == "" {
+					name = arr[i-1]
+
 				} else {
-					lastname = lastname + "_" + before
+					name = name + "_" + arr[i-1]
 				}
 			}
-		}
-		before = now
-		if i == len(arr)-1 {
-			lastname = lastname + "_" + now
-		}
-	}
-	fqName := prometheus.BuildFQName(namespace, subName, lastname)
-	metricDesc := prometheus.NewDesc(fqName, "metric Path by - "+mPath, labelList, nil)
+			if i == len(arr)-1 {
+				// 배열 마지막인지 확인
+				name = name + "_" + arr[i]
+				continue
+			}
 
-	return MetricSet{
-		metricDesc: metricDesc,
-		labelSet:   labelSet,
+		}
+
+		cols.metricList[path] = prometheus.NewGaugeVec(prometheus.GaugeOpts{Namespace: namespace, Subsystem: cols.subName, Name: name}, labels)
+
 	}
+	return true
+
 }
 
-func (c *MetricCollector) GenerateEntries(entries *types.MetricQueryEntries, ch chan<- prometheus.Metric) float64 {
-	var result float64
-	var f float64
-	var push bool
-	var err error
-	if entries.Entries == nil {
-		return result
+func convValue2Float64(value reflect.Value) float64 {
+	v := value.Type().String()
+
+	switch {
+	case strings.Contains(v, "uint"):
+		return float64(value.Uint())
+	case strings.Contains(v, "float"):
+		return value.Float()
+	case strings.Contains(v, "int"):
+		return float64(value.Int())
+	default:
+		return 0
 	}
-	entry := entries.Entries[0]
-	content := entry.Content
-	// Check to exist metricList
-	if c.metricList[content.Path].metricDesc == nil {
-		c.logger.Warn("cannot search the metric desc", "metric_path", content.Path)
-		//continue
-	}
-	for k1, v1 := range content.Values {
-		v1type := reflect.TypeOf(v1).String()
-		if strings.Contains(v1type, "interface") {
+
+}
+
+func (cols *collectorSt) generateMetrics(path string, value map[string]interface{}) bool {
+	var result bool
+
+	for k1, v1 := range value {
+		val1 := reflect.ValueOf(v1)
+		if strings.Contains(val1.Type().String(), "interface") {
 			for k2, v2 := range v1.(map[string]interface{}) {
-				push = true
-				v2type := reflect.TypeOf(v2).String()
-				if strings.Contains(v2type, "interface") {
-					c.logger.Error("parsing error - interface")
-					push = false
-				} else if strings.Contains(v2type, "int") {
-					f = float64(reflect.ValueOf(v2).Int())
-				} else if strings.Contains(v2type, "float") {
-					f = reflect.ValueOf(v2).Float()
-				} else if strings.Contains(v2type, "string") {
-					f, err = strconv.ParseFloat(reflect.ValueOf(v2).String(), 64)
-					if err != nil {
-						c.logger.Error("parsing error - string")
-						push = false
-					}
-				}
-				if push {
-					ch <- prometheus.MustNewConstMetric(c.metricList[content.Path].metricDesc, prometheus.GaugeValue, f, k1, k2)
+				val2 := reflect.ValueOf(v2)
+				if strings.Contains(val2.Type().String(), "interface") {
+					return result
+				} else if strings.Contains(val2.Type().String(), "string") {
+					return result
+				} else {
+					cols.metricList[path].WithLabelValues(k1, k2).Set(convValue2Float64(val2))
 				}
 			}
+		} else if strings.Contains(val1.Type().String(), "string") {
+			return result
 		} else {
-			push = true
-			if strings.Contains(v1type, "int") {
-				f = float64(reflect.ValueOf(v1).Int())
-			} else if strings.Contains(v1type, "float") {
-				f = reflect.ValueOf(v1).Float()
-			} else if strings.Contains(v1type, "string") {
-				f, err = strconv.ParseFloat(reflect.ValueOf(v1).String(), 64)
-				if err != nil {
-					c.logger.Error("parsing error - string")
-					push = false
-				}
-			}
-			if push {
-				ch <- prometheus.MustNewConstMetric(c.metricList[content.Path].metricDesc, prometheus.GaugeValue, f, k1)
-			}
+			cols.metricList[path].WithLabelValues(k1).Set(convValue2Float64(val1))
 		}
 	}
+
+	result = true
 	return result
-}
 
-func (c *MetricCollector) Update(uc *client.UnisphereClient, ch chan<- prometheus.Metric) float64 {
-	var result float64
-	var entries types.MetricQueryEntries
-	c.logger = uc.Logger
-	//qid := uc.PostMetricRealTimeQuery(c.metricPath, 60)
-	//if qid == 0 {
-	//	return result
-	//}
-
-	var wg sync.WaitGroup
-	wg.Add(len(c.metricPath))
-	for _, path := range c.metricPath {
-		go func() {
-			defer wg.Done()
-			data := uc.QueryMetricValue(path)
-			err := json.Unmarshal(data, &entries)
-			if err != nil {
-				uc.Logger.Error("Unmarshalling Error", "error_msg", err)
-			}
-			result = c.GenerateEntries(&entries, ch)
-		}()
-	}
-	wg.Wait()
-
-	//	data := uc.GetMetricRealTimeQueryResult(0)
-	//err := json.Unmarshal(data, &entries)
-	//if err != nil {
-	//uc.Logger.Error("Unmarshalling Error", "error_msg", err)
-	//return result
-	//}
-	//result = c.GenerateEntries(&entries, ch)
-	result = 1.0
-	return result
 }

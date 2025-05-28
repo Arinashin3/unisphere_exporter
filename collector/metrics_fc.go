@@ -1,20 +1,26 @@
 package collector
 
-func init() {
-	NewCollector(NewMetricFCCollector())
-}
+import (
+	"github.com/prometheus/client_golang/prometheus"
+	"sync"
+	"unisphere_exporter/client"
+)
 
-func NewMetricFCCollector() (string, Collector) {
-	var m MetricCollector
-	m.subName = "fc"
-	m.metricPath = []string{
+func collectMetricFC(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) bool {
+	defer wg.Done()
+	var cols collectorSt
+	cols.subName = "fc"
+	cols.apiPath = "/api/types/metricValue/instances"
+
+	metrics := []string{
 		"sp.*.fibreChannel.fePort.*.readBytesRate",
 		"sp.*.fibreChannel.fePort.*.readsRate",
 		"sp.*.fibreChannel.fePort.*.writeBytesRate",
 		"sp.*.fibreChannel.fePort.*.writesRate",
 	}
 
-	m.GenerateCollector()
+	cols.convMetric2GaugeVec(metrics)
+	cols.getMetric(uc, reg)
 
-	return m.subName, &m
+	return true
 }

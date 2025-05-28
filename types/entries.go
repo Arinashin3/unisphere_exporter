@@ -30,7 +30,22 @@ type PoolContent struct {
 	RaidType  int    `json:"raidType"`
 	SizeFree  uint64 `json:"sizeFree"`
 	SizeTotal uint64 `json:"sizeTotal"`
-	SizeUsed  uint64 `json:"sizeUsed"`
+	//SizeUsed  uint64 `json:"sizeUsed"`
+}
+
+// Lun Entries
+// Path : "/api/types/lun/instances"
+type LunEntries struct {
+	Entries []struct {
+		Content LunContent `json:"content"`
+	} `json:"entries"`
+}
+
+type LunContent struct {
+	Id            string `json:"id"`
+	Name          string `json:"name"`
+	SizeTotal     uint64 `json:"sizeTotal"`
+	SizeAllocated uint64 `json:"sizeAllocated"`
 }
 
 type SysCapContent struct {
