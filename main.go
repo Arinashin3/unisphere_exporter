@@ -44,7 +44,6 @@ func main() {
 		collector.Probe(&w, r, logger)
 	})
 
-	go http.ListenAndServe(*listen, nil)
-	select {}
+	http.ListenAndServe(*listen, nil)
 
 }

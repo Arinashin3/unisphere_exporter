@@ -4,16 +4,18 @@ package types
 // Path : "/api/types/basicSystemInfo/instances"
 type BasicSystemInfoEntries struct {
 	Entries []struct {
-		Content struct {
-			ID                  string `json:"id"`
-			Name                string `json:"name"`
-			Model               string `json:"model"`
-			SoftwareVersion     string `json:"softwareVersion"`
-			SoftwareFullVersion string `json:"softwareFullVersion"`
-			ApiVersion          string `json:"apiVersion"`
-			EarliestApiVersion  string `json:"earliestApiVersion"`
-		} `json:"content"`
+		Content BasicSystemInfoContent `json:"content"`
 	} `json:"entries"`
+}
+
+type BasicSystemInfoContent struct {
+	Id                  string `json:"id"`
+	Name                string `json:"name"`
+	Model               string `json:"model"`
+	SoftwareVersion     string `json:"softwareVersion"`
+	SoftwareFullVersion string `json:"softwareFullVersion"`
+	ApiVersion          string `json:"apiVersion"`
+	EarliestApiVersion  string `json:"earliestApiVersion"`
 }
 
 // Pool Entries
@@ -25,12 +27,11 @@ type PoolEntries struct {
 }
 
 type PoolContent struct {
-	ID        string `json:"id"`
+	Id        string `json:"id"`
 	Name      string `json:"name"`
 	RaidType  int    `json:"raidType"`
 	SizeFree  uint64 `json:"sizeFree"`
 	SizeTotal uint64 `json:"sizeTotal"`
-	//SizeUsed  uint64 `json:"sizeUsed"`
 }
 
 // Lun Entries
@@ -46,10 +47,19 @@ type LunContent struct {
 	Name          string `json:"name"`
 	SizeTotal     uint64 `json:"sizeTotal"`
 	SizeAllocated uint64 `json:"sizeAllocated"`
+	Pool          struct {
+		Id string `json:"id,omitempty"`
+	} `json:"pool"`
+}
+
+type SysCapEntries struct {
+	Entries []struct {
+		Content SysCapContent `json:"content"`
+	} `json:"entries"`
 }
 
 type SysCapContent struct {
-	ID                     string  `json:"id"`
+	Id                     string  `json:"id"`
 	SizeFree               uint64  `json:"sizeFree"`
 	SizeTotal              uint64  `json:"sizeTotal"`
 	SizeUsed               uint64  `json:"sizeUsed"`
@@ -63,8 +73,30 @@ type SysCapContent struct {
 	SnapsSavingsRatio      float64 `json:"snapsSavingsRatio"`
 	OverallEfficiencyRatio float64 `json:"overallEfficiencyRatio"`
 }
-type SysCapEntries struct {
+
+type FilesystemEntries struct {
 	Entries []struct {
-		Content SysCapContent `json:"content"`
+		Content FilesystemContent `json:"content"`
 	} `json:"entries"`
+}
+
+type FilesystemContent struct {
+	Id            string `json:"id"`
+	Name          string `json:"name"`
+	SizeTotal     uint64 `json:"sizeTotal"`
+	SizeUsed      uint64 `json:"sizeUsed"`
+	SizeAllocated uint64 `json:"sizeAllocated"`
+	IsThinEnabled bool   `json:"isThinEnabled"`
+}
+
+type FcPortEntries struct {
+	Entries []struct {
+		Content FilesystemContent `json:"content"`
+	} `json:"entries"`
+}
+
+type FcPortContent struct {
+	Id           string `json:"id"`
+	Name         string `json:"name"`
+	CurrentSpeed uint64 `json:"sizeTotal"`
 }

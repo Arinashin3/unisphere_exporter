@@ -26,12 +26,14 @@ type Targets struct {
 }
 
 type UnisphereClient struct {
-	url    url.URL
-	auth   string
-	ctx    context.Context
-	token  string
-	Logger *slog.Logger
-	hc     *http.Client
+	url           url.URL
+	auth          string
+	ctx           context.Context
+	Logger        *slog.Logger
+	hc            *http.Client
+	loginAt       time.Time
+	lastConnected time.Time
+	token         string
 }
 
 type Modules struct {
@@ -45,12 +47,106 @@ type Configs struct {
 var (
 	configMap Configs
 	roots     *x509.CertPool
+	ucList    map[string]*UnisphereClient
 )
 
-func NewClient(tgt string, mod string, logger *slog.Logger) (*UnisphereClient, bool) {
+func init() {
+	ucList = make(map[string]*UnisphereClient)
+}
+
+func GetClient(tgt string, mod string, logger *slog.Logger) {
+	u := ucList[tgt]
+	loginDuration := time.Now().AddDate(0, 0, -1).Second()
+	if u == nil {
+		CreateClient(tgt, mod, logger)
+		ucList[tgt].ClientLogIn()
+	}
+	if u.loginAt.Second() < loginDuration {
+		ucList[tgt].ClientLogout()
+	}
+
+	ucList[tgt].lastConnected = time.Now()
+}
+
+func (uc *UnisphereClient) ClientLogIn() bool {
+	var result bool
+	var err error
+	logger := uc.Logger
+
+	uc.url.Path = "/api/types/loginSessionInfo/instances"
+	uc.hc.Jar, err = cookiejar.New(nil)
+	if err != nil {
+		logger.Error("Failed to Create CookieJar.", "url", uc.url.String(), "error", err)
+	}
+
+	// Create Requert
+	req, err := http.NewRequest("GET", uc.url.String(), nil)
+	if err != nil {
+		logger.Error("Failed to Create Request.", "error", err)
+		return result
+	}
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("X-EMC-REST-CLIENT", "true")
+	req.Header.Add("Authorization", "Basic "+uc.auth)
+	req.WithContext(uc.ctx)
+
+	var resp *http.Response
+	resp, err = uc.hc.Do(req)
+	if err != nil {
+		logger.Error("Response Error", "error", err)
+		return false
+	}
+	if int(resp.StatusCode/100) != 2 {
+		logger.Error("Http Code is Not 2xx.", "http_code", resp.StatusCode)
+		return false
+	}
+
+	uc.loginAt = time.Now()
+	uc.token = resp.Header.Get("Emc-Csrf-Token")
+	return true
+}
+
+func (uc *UnisphereClient) ClientLogout() bool {
+	var result bool
+	var err error
+	logger := uc.Logger
+
+	uc.url.Path = "/api/types/loginSessionInfo/action/logout"
+
+	// Create Request
+	req, err := http.NewRequest("POST", uc.url.String(), nil)
+	if err != nil {
+		logger.Error("Failed to Create Request.", "error", err)
+		return result
+	}
+	req.Header.Add("Accept", "application/json")
+	req.Header.Add("Content-Type", "application/json")
+	req.Header.Add("EMC-CSRF-TOKEN", uc.token)
+	//req.Header.Add("X-EMC-REST-CLIENT", "true")
+	//req.Header.Add("Authorization", "Basic "+uc.auth)
+	req.WithContext(uc.ctx)
+
+	var resp *http.Response
+	resp, err = uc.hc.Do(req)
+	if err != nil {
+		logger.Error("Response Error", "error", err)
+
+		return false
+
+	}
+	if int(resp.StatusCode/100) != 2 {
+		logger.Error("Http Code is Not 2xx.", "http_code", resp.StatusCode)
+		return false
+	}
+	return true
+}
+
+func CreateClient(tgt string, mod string, logger *slog.Logger) (*UnisphereClient, bool) {
 	var uc UnisphereClient
 	uc.url.Host = tgt
 	uc.Logger = logger
+	uc.ctx = context.Background()
 	if !uc.searchModule(mod) {
 		return &uc, false
 	}
@@ -60,7 +156,9 @@ func NewClient(tgt string, mod string, logger *slog.Logger) (*UnisphereClient, b
 func (uc *UnisphereClient) tryLogin() bool {
 	//uc.url.Scheme = "http"
 	tgt := uc.url
-	tgt.Path = "/api/types/user/instances"
+	tgt.Path = "/api/types/loginSessionInfo/instances"
+	ctx, cancel := context.WithTimeout(uc.ctx, 10*time.Second)
+	defer cancel()
 	req, err := http.NewRequest("GET", tgt.String(), nil)
 	if err != nil {
 		uc.Logger.Error("Login Failed", "error", err)
@@ -70,6 +168,7 @@ func (uc *UnisphereClient) tryLogin() bool {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", "Basic "+uc.auth)
 	req.Header.Add("X-EMC-REST-CLIENT", "true")
+	req.WithContext(ctx)
 
 	resp, err := uc.hc.Do(req)
 	if err != nil {
@@ -77,7 +176,8 @@ func (uc *UnisphereClient) tryLogin() bool {
 		return false
 	}
 	defer resp.Body.Close()
-	uc.token = resp.Header.Get("Emc-Csrf-Token")
+
+	//uc.token = resp.Header.Get("Emc-Csrf-Token")
 	return true
 }
 
@@ -116,6 +216,7 @@ func SetModules(cfgFile *string, logger *slog.Logger) bool {
 		if v.Timeout == "" {
 			v.Timeout = "10s"
 		}
+
 		v.loaded = true
 		cfgMap.Modules[k] = v
 	}
@@ -164,6 +265,8 @@ func (uc *UnisphereClient) Get(path string, query string) []byte {
 	tgt := uc.url
 	tgt.Path = path
 	tgt.RawQuery = query
+	ctx, cancel := context.WithTimeout(uc.ctx, 10*time.Second)
+	defer cancel()
 	req, err := http.NewRequest("GET", tgt.String(), nil)
 	if err != nil {
 		uc.Logger.Error("Login Failed", "error", err)
@@ -172,7 +275,7 @@ func (uc *UnisphereClient) Get(path string, query string) []byte {
 	req.Header.Add("Content-Type", "application/json")
 	req.Header.Add("Authorization", "Basic "+uc.auth)
 	req.Header.Add("X-EMC-REST-CLIENT", "true")
-	//req.WithContext(uc.ctx)
+	req.WithContext(ctx)
 
 	resp, err := uc.hc.Do(req)
 	defer resp.Body.Close()

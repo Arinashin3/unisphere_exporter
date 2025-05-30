@@ -7,25 +7,21 @@ import (
 	"unisphere_exporter/utils"
 )
 
-func collectMetricLun(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) bool {
+func collectMetricFilesystem(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) bool {
 	defer wg.Done()
-
 	cols := utils.MetricCollector{
 		Namespace: namespace,
-		SubName:   "lun",
+		SubName:   "fs",
 		ApiPath:   "/api/types/metricValue/instances",
 		Registry:  reg,
 		Logger:    uc.Logger,
 	}
 	cols.MetricPath = []string{
-		"sp.*.storage.lun.*.readBytesRate",
-		"sp.*.storage.lun.*.readsRate",
-		"sp.*.storage.lun.*.writeBytesRate",
-		"sp.*.storage.lun.*.writesRate",
-		"sp.*.storage.lun.*.queueLength",
-		"sp.*.storage.lun.*.responseTime",
+		"sp.*.storage.filesystem.*.readBytesRate",
+		"sp.*.storage.filesystem.*.readsRate",
+		"sp.*.storage.filesystem.*.writeBytesRate",
+		"sp.*.storage.filesystem.*.writesRate",
 	}
-
 	cols.CreateGaugeVec()
 	cols.GetGaugeValue(uc)
 
