@@ -11,13 +11,6 @@ import (
 
 const namespace = "unisphere"
 
-var ucList map[string]*client.UnisphereClient
-
-func init() {
-	ucList = make(map[string]*client.UnisphereClient)
-
-}
-
 func Probe(w *http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 	params := r.URL.Query()
 	target := params.Get("target")
@@ -31,17 +24,13 @@ func Probe(w *http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 		return
 	}
 
-	var connected bool
-	if ucList[target] == nil {
-		ucList[target], connected = client.CreateClient(target, module, logger)
-
-		if !connected {
-			return
-		}
+	uc := client.ReadyClient(target, module, logger)
+	if uc == nil {
+		logger.Error("Cannot find client", "client", target)
+		return
 	}
 
-	uc := ucList[target]
-	uc.ClientLogIn()
+	//client.GetClient(target, module, logger)
 
 	//uc, connected := client.NewClient(target, module, logger)
 	reg := prometheus.NewRegistry()

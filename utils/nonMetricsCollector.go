@@ -50,7 +50,6 @@ func (c *NonMetricCollector) GetGaugeValue(uc *client.UnisphereClient, outputJso
 	query := "fields=" + strings.Join(c.requiredFields, ",")
 	query += "&compact=true"
 
-	uc.Get(c.ApiPath, query)
 	if json.Unmarshal(uc.Get(c.ApiPath, query), outputJson) != nil {
 		c.Logger.Error("Unmarshal is Failed.", "subsystem", c.SubName)
 		return false
