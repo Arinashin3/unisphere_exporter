@@ -18,7 +18,6 @@ func collectPool(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.
 		Namespace: namespace,
 		SubName:   "pool",
 		Registry:  reg,
-		Logger:    uc.Logger,
 		Labels:    []string{"pool", "pool_name"},
 	}
 

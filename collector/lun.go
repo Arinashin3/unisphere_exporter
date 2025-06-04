@@ -18,7 +18,6 @@ func collectLun(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.W
 		Namespace: namespace,
 		SubName:   "lun",
 		Registry:  reg,
-		Logger:    uc.Logger,
 		Labels:    []string{"lun", "lun_name", "pool"},
 	}
 

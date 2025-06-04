@@ -14,7 +14,6 @@ func collectMetricFC(uc *client.UnisphereClient, reg *prometheus.Registry, wg *s
 		SubName:   "fc",
 		ApiPath:   "/api/types/metricValue/instances",
 		Registry:  reg,
-		Logger:    uc.Logger,
 	}
 	cols.MetricPath = []string{
 		"sp.*.fibreChannel.fePort.*.readBytesRate",

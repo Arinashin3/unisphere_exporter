@@ -9,21 +9,21 @@ import (
 	"unisphere_exporter/utils"
 )
 
-func collectSystemCapacity(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) float64 {
+func collectReplication(uc *client.UnisphereClient, reg *prometheus.Registry, wg *sync.WaitGroup) float64 {
 	defer wg.Done()
 	var result float64
 
 	cols := utils.NonMetricCollector{
-		ApiPath:   "/api/types/systemCapacity/instances",
+		ApiPath:   "/api/types/replicationSession/instances",
 		Namespace: namespace,
-		SubName:   "syscap",
+		SubName:   "fs",
 		Registry:  reg,
-		Labels:    []string{},
+		Labels:    []string{"session_name", "source", "destination"},
 	}
 
-	cols.CreateGaugeVec(types.SysCapContent{})
+	cols.CreateGaugeVec(types.ReplicationContent{})
 
-	var jData types.SysCapEntries
+	var jData types.ReplicationEntries
 	if !cols.GetGaugeValue(uc, &jData) {
 		return result
 	}
@@ -31,11 +31,12 @@ func collectSystemCapacity(uc *client.UnisphereClient, reg *prometheus.Registry,
 		uc.Logger.Error("Contents is Null.", "subsystem", cols.SubName)
 		return result
 	}
+
 	for _, entry := range jData.Entries {
 		content := entry.Content
 		for k, _ := range cols.MetricGaugeVecList {
 			v := reflect.ValueOf(content).FieldByName(k)
-			cols.MetricGaugeVecList[k].WithLabelValues().Set(utils.Types2Float64(v))
+			cols.MetricGaugeVecList[k].WithLabelValues(content.Id, content.Name).Set(utils.Types2Float64(v))
 		}
 	}
 

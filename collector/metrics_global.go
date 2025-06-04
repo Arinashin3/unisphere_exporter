@@ -15,7 +15,6 @@ func collectMetricGlobal(uc *client.UnisphereClient, reg *prometheus.Registry, w
 		SubName:   "global",
 		ApiPath:   "/api/types/metricValue/instances",
 		Registry:  reg,
-		Logger:    uc.Logger,
 	}
 	cols.MetricPath = []string{
 		"sp.*.cpu.summary.utilization",

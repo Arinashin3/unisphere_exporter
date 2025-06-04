@@ -36,7 +36,7 @@ func main() {
 	runtime.GOMAXPROCS(*maxProcs)
 	logger.Debug("Go MAXPROCS", "procs", runtime.GOMAXPROCS(0))
 
-	client.SetModules(configFile, logger)
+	client.InitModules(configFile, logger)
 
 	logger.Info("Unisphere exporter running.", "listen_port", *listen)
 	http.Handle("/metrics", promhttp.Handler())

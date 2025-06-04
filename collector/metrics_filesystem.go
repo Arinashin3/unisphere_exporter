@@ -14,7 +14,6 @@ func collectMetricFilesystem(uc *client.UnisphereClient, reg *prometheus.Registr
 		SubName:   "fs",
 		ApiPath:   "/api/types/metricValue/instances",
 		Registry:  reg,
-		Logger:    uc.Logger,
 	}
 	cols.MetricPath = []string{
 		"sp.*.storage.filesystem.*.readBytesRate",

@@ -1,5 +1,7 @@
 package types
 
+import "time"
+
 // Basic System Information Entries
 // Path : "/api/types/basicSystemInfo/instances"
 type BasicSystemInfoEntries struct {
@@ -99,4 +101,26 @@ type FcPortContent struct {
 	Id           string `json:"id"`
 	Name         string `json:"name"`
 	CurrentSpeed uint64 `json:"sizeTotal"`
+}
+
+type ReplicationEntries struct {
+	Entries []struct {
+		Content ReplicationContent `json:"content"`
+	} `json:"entries"`
+}
+
+type ReplicationContent struct {
+	Id                      string `json:"id"`
+	Name                    string `json:"name"`
+	Status                  int    `json:"status"`
+	LocalRole               int    `json:"localRole"`
+	ReplicationResourceType int    `json:"replicationResourceType"`
+	Health                  struct {
+		Value int `json:"value"`
+	} `json:"health"`
+	RemoteSystem struct {
+		Id   string `json:"id"`
+		Name string `json:"name"`
+	} `json:"remoteSystem"`
+	LastSyncTime time.Time `json:"lastSyncTime,omitempty"`
 }

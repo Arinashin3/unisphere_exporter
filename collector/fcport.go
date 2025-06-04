@@ -18,7 +18,6 @@ func collectFcPort(uc *client.UnisphereClient, reg *prometheus.Registry, wg *syn
 		Namespace: namespace,
 		SubName:   "fcport",
 		Registry:  reg,
-		Logger:    uc.Logger,
 		Labels:    []string{"fcport", "fcport_name"},
 	}
 

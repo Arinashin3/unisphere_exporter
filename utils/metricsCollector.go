@@ -3,7 +3,6 @@ package utils
 import (
 	"encoding/json"
 	"github.com/prometheus/client_golang/prometheus"
-	"log/slog"
 	"reflect"
 	"strings"
 	"unisphere_exporter/client"
@@ -16,7 +15,6 @@ type MetricCollector struct {
 	ApiPath            string
 	MetricPath         []string
 	Registry           *prometheus.Registry
-	Logger             *slog.Logger
 	MetricGaugeVecList map[string]*prometheus.GaugeVec
 }
 
@@ -55,28 +53,30 @@ func (c *MetricCollector) CreateGaugeVec() {
 }
 func (c *MetricCollector) GetGaugeValue(uc *client.UnisphereClient) bool {
 	ok := true
+	logger := uc.Logger
 
 	for k, _ := range c.MetricGaugeVecList {
 		var jData types.MetricQueryEntries
 		query := "filter=path%20EQ%20\"" + k + "\""
 		query += "&compact=true"
-		data := uc.Get(c.ApiPath, query)
+		data := uc.Send("GET", c.ApiPath, query, nil)
 		if data == nil {
-			uc.Logger.Error("Data is Nil.", "path", k)
+			logger.Error("Data is Nil.", "path", k)
 			ok = false
 			continue
 		}
 		if json.Unmarshal(data, &jData) != nil {
-			uc.Logger.Error("Unmarshal is Failed", "path", k)
+			logger.Error("Unmarshal is Failed", "path", k)
 			ok = false
 			continue
 		}
 		if jData.Entries == nil {
-			uc.Logger.Error("Entries is Null", "path", k)
+			logger.Error("Entries is Null", "path", k)
 			ok = false
 			continue
 		}
 
+		logger.Debug("Success Request and Parsing to Json", "subsystem", c.SubName, "metric", k)
 		c.generateMetrics(k, jData.Entries[0].Content.Values)
 
 	}

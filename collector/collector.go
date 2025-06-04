@@ -24,18 +24,20 @@ func Probe(w *http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 		return
 	}
 
-	uc := client.ReadyClient(target, module, logger)
+	uc := client.LoadClient(target, module, logger)
 	if uc == nil {
-		logger.Error("Cannot find client", "client", target)
 		return
 	}
 
-	//client.GetClient(target, module, logger)
-
-	//uc, connected := client.NewClient(target, module, logger)
+	// Connection Test
+	resp := uc.Send("GET", "/api/types/loginSessionInfo/instances", "compact=true", nil)
+	if resp == nil {
+		logger.Error("Connection Failed.", "client", target, "module", module)
+		return
+	}
 	reg := prometheus.NewRegistry()
 	var wg sync.WaitGroup
-	wg.Add(9)
+	wg.Add(10)
 	go collectBasicSystemInfo(uc, reg, &wg)
 	go collectPool(uc, reg, &wg)
 	go collectSystemCapacity(uc, reg, &wg)
@@ -45,6 +47,7 @@ func Probe(w *http.ResponseWriter, r *http.Request, logger *slog.Logger) {
 	go collectLun(uc, reg, &wg)
 	go collectMetricFilesystem(uc, reg, &wg)
 	go collectFilesystem(uc, reg, &wg)
+	go collectReplication(uc, reg, &wg)
 	wg.Wait()
 	h := promhttp.HandlerFor(reg, promhttp.HandlerOpts{})
 	h.ServeHTTP(*w, r)

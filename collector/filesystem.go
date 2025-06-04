@@ -18,7 +18,6 @@ func collectFilesystem(uc *client.UnisphereClient, reg *prometheus.Registry, wg 
 		Namespace: namespace,
 		SubName:   "fs",
 		Registry:  reg,
-		Logger:    uc.Logger,
 		Labels:    []string{"filesystem", "filesystem_name"},
 	}
 

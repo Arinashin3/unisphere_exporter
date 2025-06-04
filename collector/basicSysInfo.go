@@ -18,7 +18,6 @@ func collectBasicSystemInfo(uc *client.UnisphereClient, reg *prometheus.Registry
 		Namespace: namespace,
 		SubName:   "basicsystem",
 		Registry:  reg,
-		Logger:    uc.Logger,
 		Labels:    []string{"model", "sw_ver", "api_ver"},
 	}
 

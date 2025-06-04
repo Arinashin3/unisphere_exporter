@@ -15,7 +15,6 @@ func collectMetricLun(uc *client.UnisphereClient, reg *prometheus.Registry, wg *
 		SubName:   "lun",
 		ApiPath:   "/api/types/metricValue/instances",
 		Registry:  reg,
-		Logger:    uc.Logger,
 	}
 	cols.MetricPath = []string{
 		"sp.*.storage.lun.*.readBytesRate",
