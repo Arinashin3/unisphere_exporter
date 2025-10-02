@@ -50,7 +50,7 @@ clients:
 
 auths:
   - name: 'appez'
-    user: 'admin'
+    user: 'appez'
     password: 'Passw0rd1!'
 
 # Providers Sections
