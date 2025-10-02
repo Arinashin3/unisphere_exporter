@@ -3,7 +3,7 @@ module unisphere_exporter
 go 1.24
 
 require (
-	github.com/Arinashin3/gounity v0.0.0-20251001103124-b4fb84649972
+	github.com/Arinashin3/gounity v0.0.0-20251002050753-2e211ee3fb44
 	github.com/alecthomas/kingpin/v2 v2.4.0
 	github.com/prometheus/common v0.62.0
 	go.opentelemetry.io/otel v1.38.0
