@@ -1,9 +1,101 @@
-modules:
-  test:
-    user: "admin"
-    password: "Passw0rd1!"
+global:
+  server:
+    endpoint: 'http://10.77.78.11:8080'          # Default: http://127.0.0.1:8080
+#    api_path: '/api/v1/otlp/v1/metrics'   # Default: "
+    insecure: true                         # yes(y), true / no(n), false
+  client:
+    auth: 'appez'
     insecure: true
-  test2:
-    user: "root"
-    password: "P@ss"
-    insecure: false
+    labels:
+      env: 'production'
+      host_group: 'TEST'
+  provider:
+    interval: 1m
+
+server:
+  metrics:
+    endpoint: 'http://10.77.78.11:9090'
+    api_path: '/api/v1/otlp/v1/metrics'
+#    mode: 'grpc'
+    insecure: true
+    enabled: true
+  logs:
+    endpoint: 'http://10.77.78.11:3100'
+    api_path: '/otlp/v1/logs'
+    enabled: true
+#    mode: 'grpc'
+  traces:
+    endpoint: ''
+    enabled: false
+
+# clients Section
+#########################
+## clients에 모니터링 대상 장비들을 정의합니다.
+## endpoint = 스토리지 서버의 엔드포인트(Spectrum API)
+## auth = 사용할 인증 정보(auths.name)
+## Insecure = TLS 설정
+clients:
+  - endpoint: 'https://10.77.77.222'
+    auth: 'appez'
+    insecure: true
+    labels:
+      env: "production"
+      host_group: "Dell"
+  - endpoint: 'https://10.77.77.221'
+    auth: 'appez'
+    insecure: true
+    labels:
+      env: "production"
+      host_group: "Dell"
+
+auths:
+  - name: 'appez'
+    user: 'admin'
+    password: 'Passw0rd1!'
+
+# Providers Sections
+# default :
+# if interval is not define, that will be to set global.
+providers:
+  system:
+    enabled: true
+  capacity:
+    enabled: true
+  metric_a:
+    paths:
+      - "sp.*.physical.coreCount"
+      - "sp.*.cpu.summary.busyTicks"
+      - "sp.*.blockCache.global.summary.cleanBytes"
+      - "sp.*.blockCache.global.summary.cleanPages"
+      - "sp.*.blockCache.global.summary.dirtyBytes"
+      - "sp.*.blockCache.global.summary.dirtyPages"
+      - "sp.*.blockCache.global.summary.flushedBlocks"
+      - "sp.*.blockCache.global.summary.flushedes"
+      - "sp.*.physical.disk.*.readBlocks"
+      - "sp.*.physical.disk.*.writeBlocks"
+      - "sp.*.physical.disk.*.reads"
+      - "sp.*.physical.disk.*.writes"
+      - "sp.*.fibreChannel.fePort.*.readBlocks"
+      - "sp.*.fibreChannel.fePort.*.writeBlocks"
+      - "sp.*.fibreChannel.fePort.*.reads"
+      - "sp.*.fibreChannel.fePort.*.writes"
+      - "sp.*.iscsi.fePort.*.readBlocks"
+      - "sp.*.iscsi.fePort.*.writeBlocks"
+      - "sp.*.iscsi.fePort.*.reads"
+      - "sp.*.iscsi.fePort.*.writes"
+    interval: 1m
+    enabled: true
+  metric_b:
+    paths:
+    interval: 1m
+    enabled: false
+  metric_c:
+    paths:
+    interval: 5m
+    enabled: false
+  event:
+    enabled: true
+    level: 5
+  lun:
+    enabled: true
+    interval: 1m

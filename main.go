@@ -1,49 +1,49 @@
 package main
 
 import (
+	"log/slog"
+	"os"
+	"unisphere_exporter/config"
+	"unisphere_exporter/provider"
+
 	"github.com/alecthomas/kingpin/v2"
-	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/prometheus/common/promslog"
-	"github.com/prometheus/common/promslog/flag"
-	"github.com/prometheus/common/version"
-	"net/http"
-	"os/user"
-	"runtime"
-	"unisphere_exporter/client"
-	"unisphere_exporter/collector"
+	promslogflag "github.com/prometheus/common/promslog/flag"
+)
+
+var (
+	configFile = kingpin.Flag("config.file", "Path to config file.").Short('c').Default("config.file").String()
+	logger     *slog.Logger
+	isFailed   bool
 )
 
 func main() {
-	var (
-		configFile = kingpin.Flag("config.file", "file containing the authentication map to use when connecting to a Unisphere device").Default("config.yml").String()
-		listen     = kingpin.Flag("web.listen-address", "Addresses on which to expose metrics and web interface.").Default(":9182").String()
-		maxProcs   = kingpin.Flag("runtime.gomaxprocs", "The target number of CPUs Go will run on (GOMAXPROCS)").Envar("GOMAXPROCS").Default("1").Int()
-	)
-
+	// Set Flag & Logger
 	promslogConfig := &promslog.Config{}
-	flag.AddFlags(kingpin.CommandLine, promslogConfig)
-	kingpin.Version(version.Print("unisphere_exporter"))
+	promslogflag.AddFlags(kingpin.CommandLine, promslogConfig)
 	kingpin.HelpFlag.Short('h')
 	kingpin.Parse()
 
-	logger := promslog.New(promslogConfig)
-	logger.Info("Starting unisphere_exporter", "version", version.Info())
-	logger.Info("Build context", "build_context", version.BuildContext())
+	logger = promslog.New(promslogConfig)
 
-	if u, err := user.Current(); err == nil && u.Uid == "0" {
-		logger.Warn("Unisphere Exporter is running as root user. This exporter is designed to run as unprivileged user, root is not required.")
+	// Load Configuration Set Configurations...
+	logger.Info("Load Configs...")
+	var cfg *config.UnisphereConfig
+	cfg = config.NewConfiguration()
+	err := cfg.LoadFile(configFile)
+	if err != nil {
+		isFailed = true
+		logger.Error("Failed to load config file.", "error", err)
 	}
-	runtime.GOMAXPROCS(*maxProcs)
-	logger.Debug("Go MAXPROCS", "procs", runtime.GOMAXPROCS(0))
 
-	client.InitModules(configFile, logger)
+	if !provider.RegistryProviders(cfg, logger) {
+		isFailed = true
+	}
 
-	logger.Info("Unisphere exporter running.", "listen_port", *listen)
-	http.Handle("/metrics", promhttp.Handler())
-	http.HandleFunc("/probe", func(w http.ResponseWriter, r *http.Request) {
-		collector.Probe(&w, r, logger)
-	})
+	if isFailed {
+		logger.Error("Failed to load configs...")
+		os.Exit(1)
+	}
 
-	http.ListenAndServe(*listen, nil)
-
+	provider.RunProviders(logger)
 }
