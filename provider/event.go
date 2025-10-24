@@ -1,105 +1,95 @@
 package provider
 
 import (
-	"context"
+	"encoding/json"
 	"log/slog"
 	"time"
-	"unisphere_exporter/config"
+	"unisphere_exporter/gounity/api"
+	"unisphere_exporter/utils/enum"
 
+	"github.com/tidwall/gjson"
 	"go.opentelemetry.io/otel/log"
-	sdkLog "go.opentelemetry.io/otel/sdk/log"
 )
 
 func init() {
 	moduleName := "event"
-	registProvider(moduleName, &eventProvider{moduleName: moduleName})
-}
-
-func (pv *eventProvider) IsDefaultEnabled() bool {
-	return true
-}
-
-func (pv *eventProvider) NewProvider(cfg *config.UnisphereConfig, moduleName string, cl *ClientDesc) Provider {
-	pvConf := cfg.Providers.Event
-	enabled := pvConf.GetEnabled(pv.IsDefaultEnabled())
-	interval := pvConf.GetInterval()
-
-	if !enabled {
-		return nil
+	SetDefaultProvider(moduleName, true)
+	opt := api.NewUnityActionOptions(moduleName)
+	startTime := time.Now().Add(-12 * time.Hour).UTC()
+	opt.Fields = []string{
+		"creationTime",
+		"severity",
+		"messageId",
+		"message",
+		"source",
 	}
-	if LogExporter == nil {
-		return nil
+	opt.Filters = []string{
+		"creationTime gt \"" + startTime.Format("2006-01-02T15:04:05.000Z") + "\"",
 	}
-	lp := NewLoggerProvider(serviceName, interval, LogExporter)
-	return &eventProvider{
-		moduleName:     moduleName,
-		interval:       interval,
-		level:          pvConf.Level,
-		loggerProvider: lp,
-		clientDesc:     cl,
-	}
+	registryProvider(moduleName, &eventProvider{
+		moduleName: moduleName,
+		opt:        opt,
+	})
 }
 
 type eventProvider struct {
-	moduleName     string
-	interval       time.Duration
-	level          int
-	loggerProvider *sdkLog.LoggerProvider
-	clientDesc     *ClientDesc
+	moduleName string
+	opt        *api.UnityActionOptions
+	level      int
 }
 
-func (pv *eventProvider) Run(logger *slog.Logger) {
-	logger.Info("Starting provider", "endpoint", pv.clientDesc.endpoint, "provider", pv.moduleName)
-	ctx := context.Background()
-	ctime := time.Now().Add(-time.Hour).UTC()
-	uc := pv.clientDesc.client
-	lp := pv.loggerProvider
+func (_pv *eventProvider) Run(logger *slog.Logger, col *Collector) {
+	opt := *_pv.opt
+	ctime := time.Now().Add(-1 * time.Hour).UTC()
+	client := col.Client
+	lp := col.loggerProvider
 
 	for {
-
-		pvlogger := lp.Logger(pv.moduleName, log.WithInstrumentationAttributes(pv.clientDesc.hostLabels...))
-		var fields = []string{
-			"creationTime",
-			"severity",
-			"messageId",
-			"message",
-			"source",
-		}
-		filters := []string{
+		pvlogger := lp.Logger(_pv.moduleName, log.WithInstrumentationAttributes(col.labels...))
+		opt.Filters = []string{
 			"creationTime gt \"" + ctime.Format("2006-01-02T15:04:05.000Z") + "\"",
 		}
-		data, err := uc.GetEventInstances(fields, filters)
+
+		tmpTime := time.Now().UTC()
+		data, err := client.GetInstances(&opt)
 		if err != nil {
 			logger.Error("Error to GET EventLog", "err", err)
-			time.Sleep(pv.interval)
+			time.Sleep(col.interval)
 			continue
 		}
 		if data == nil {
-			time.Sleep(pv.interval)
+			time.Sleep(col.interval)
 			continue
 		}
 
-		for _, entry := range data.Entries {
+		for _, v := range data {
 			record := log.Record{}
-			content := entry.Content
-			if pv.level > int(content.Severity) {
+			if _pv.level > int(v.Get("severity").Int()) {
 				continue
 			}
 
-			record.SetTimestamp(content.CreationTime)
-			record.SetObservedTimestamp(content.CreationTime)
-			record.SetBody(log.StringValue(content.Message))
+			record.SetTimestamp(v.Get("creationTime").Time())
+			logBody := struct {
+				Source    string `json:"source"`
+				Message   string `json:"message"`
+				MessageId string `json:"message_id"`
+			}{
+				v.Get("source").String(),
+				v.Get("message").String(),
+				v.Get("messageId").String(),
+			}
+			jsonBody, _ := json.Marshal(logBody)
+			body := gjson.ParseBytes(jsonBody).String()
+			record.SetBody(log.StringValue(body))
 			record.AddAttributes(
-				log.String("level", content.Severity.String()),
-				log.String("message.id", content.MessageId),
-				log.String("source", content.Source),
+				log.String("level", enum.SeverityEnum(v.Get("severity").Int()).String()),
 			)
-			pvlogger.Emit(ctx, record)
+			pvlogger.Emit(col.ctx, record)
 
 		}
-		ctime = data.Updated.UTC()
 
-		time.Sleep(pv.interval)
+		ctime = tmpTime
+		time.Sleep(col.interval)
 	}
 
 }

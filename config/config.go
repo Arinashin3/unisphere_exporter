@@ -4,20 +4,24 @@ package config
 
 import (
 	"errors"
+	"fmt"
 	"os"
 	"reflect"
 	"strconv"
 	"time"
+	"unisphere_exporter/provider"
 
 	"gopkg.in/yaml.v3"
 )
 
+var cfg *UnisphereConfig
+
 type UnisphereConfig struct {
-	Global    *GlobalConfig   `yaml: "global,omitempty"`
-	Server    *ServerConfig   `yaml: "server,omitempty"`
-	Clients   []*ClientConfig `yaml: "targets,omitempty"`
-	Auths     []*AuthConfig   `yaml: "auths,omitempty"`
-	Providers *Providers      `yaml: "providers,omitempty"`
+	Global    *GlobalConfig              `yaml: "global,omitempty"`
+	Server    *ServerConfig              `yaml: "server,omitempty"`
+	Clients   []*ClientConfig            `yaml: "targets,omitempty"`
+	Auths     []*AuthConfig              `yaml: "auths,omitempty"`
+	Providers map[string]provider.Option `yaml: "providers,omitempty"`
 }
 
 type Providers struct {
@@ -28,10 +32,11 @@ type Providers struct {
 	Metric_B *ProviderMetric   `yaml:"metric_b,omitempty"`
 	Metric_C *ProviderMetric   `yaml:"metric_c,omitempty"`
 	Event    *ProviderEvent    `yaml:"event,omitempty"`
+	Alert    *ProviderEvent    `yaml:"alert,omitempty"`
 }
 
 func NewConfiguration() *UnisphereConfig {
-	return &UnisphereConfig{
+	cfg = &UnisphereConfig{
 		Global: &GlobalConfig{
 			Server: &GlobalServerConfig{
 				Endpoint: "http://127.0.0.1:8080",
@@ -41,11 +46,10 @@ func NewConfiguration() *UnisphereConfig {
 			},
 			Client: &GlobalClientConfig{
 				Auth:     "",
+				Interval: 1 * time.Minute,
 				Insecure: false,
 			},
-			Provider: &GlobalProviderConfig{
-				Interval: "1m",
-			},
+			Provider: &GlobalProviderConfig{},
 		},
 		Server: &ServerConfig{
 			Metrics: &ServerMetricConfig{
@@ -60,32 +64,28 @@ func NewConfiguration() *UnisphereConfig {
 		},
 		Clients: nil,
 		Auths:   nil,
-		Providers: &Providers{
-			System:   &ProviderDefaults{},
-			Lun:      &ProviderDefaults{},
-			Capacity: &ProviderDefaults{},
-			Metric_A: &ProviderMetric{},
-			Metric_B: &ProviderMetric{},
-			Metric_C: &ProviderMetric{},
-			Event: &ProviderEvent{
-				Level: 5,
-			},
-		},
+		//Providers: make(map[string]interface{}),
+		Providers: provider.ModuleOptions,
 	}
+	return cfg
 }
 
-func (cfg *UnisphereConfig) LoadFile(file *string) error {
+func (_cfg *UnisphereConfig) LoadFile(file *string) error {
 	ymlContents, err := os.ReadFile(*file)
 	if err != nil {
 		return err
 	}
+	tmp := _cfg.Providers
 
-	err = yaml.Unmarshal(ymlContents, cfg)
+	err = yaml.Unmarshal(ymlContents, _cfg)
+	for k, v := range tmp {
+		fmt.Println(k, v)
+	}
 	if err != nil {
 		return err
 	}
 
-	err = cfg.applyGlobal()
+	err = _cfg.applyGlobal()
 	if err != nil {
 		return err
 	}
@@ -96,13 +96,13 @@ func (cfg *UnisphereConfig) LoadFile(file *string) error {
 // applyGlobal
 // Section 내용이 비어있을 경우,
 // Global 설정을 각각의 Section에 적용
-func (cfg *UnisphereConfig) applyGlobal() error {
+func (_cfg *UnisphereConfig) applyGlobal() error {
 	// Set Client
-	g := cfg.Global
-	if cfg.Clients == nil {
+	g := _cfg.Global
+	if _cfg.Clients == nil {
 		return errors.New("no clients configured")
 	}
-	for _, c := range cfg.Clients {
+	for _, c := range _cfg.Clients {
 		if c.Endpoint == "" {
 			return errors.New("client endpoint is required")
 		}
@@ -112,6 +112,9 @@ func (cfg *UnisphereConfig) applyGlobal() error {
 		if c.Insecure == "" {
 			c.Insecure = strconv.FormatBool(g.Client.Insecure)
 		}
+		if c.Interval == "" {
+			c.Interval = g.Client.Interval.String()
+		}
 		for k, v := range g.Client.Labels {
 			if c.Labels[k] == "" {
 				c.Labels[k] = v
@@ -119,9 +122,9 @@ func (cfg *UnisphereConfig) applyGlobal() error {
 		}
 	}
 	// Set Global config at Servers
-	svNum := reflect.ValueOf(cfg.Server).Elem().NumField()
+	svNum := reflect.ValueOf(_cfg.Server).Elem().NumField()
 	for i := 0; i < svNum; i++ {
-		sv := reflect.ValueOf(cfg.Server).Elem().Field(i).Elem()
+		sv := reflect.ValueOf(_cfg.Server).Elem().Field(i).Elem()
 		endpoint := sv.FieldByName("Endpoint")
 		if endpoint.String() == "" {
 			endpoint.SetString(g.Server.Endpoint)
@@ -140,35 +143,13 @@ func (cfg *UnisphereConfig) applyGlobal() error {
 		}
 	}
 
-	// Check Error to parse global provider interval
-	_, err := time.ParseDuration(g.Provider.Interval)
-	if err != nil {
-		return err
-	}
-	// At the Providers, if value of field is null, then Apply Global
-	pvNum := reflect.ValueOf(cfg.Providers).Elem().NumField()
-	for i := 0; i < pvNum; i++ {
-		pv := reflect.ValueOf(cfg.Providers).Elem().Field(i).Elem()
-
-		// Apply Global Interval
-		interval := pv.FieldByName("Interval")
-		if interval.String() == "" {
-			interval.SetString(cfg.Global.Provider.Interval)
-		} else {
-			_, err = time.ParseDuration(interval.String())
-			if err != nil {
-				return err
-			}
-		}
-	}
-
 	return nil
 }
 
 // SearchAuth
 // 인증정보를 찾아, base64로 인코딩하여 리턴합니다.
-func (cfg *UnisphereConfig) SearchAuth(name string) (string, string) {
-	for _, auth := range cfg.Auths {
+func (_cfg *UnisphereConfig) SearchAuth(name string) (string, string) {
+	for _, auth := range _cfg.Auths {
 		if auth.Name == name {
 			return auth.User, auth.Password
 		}
@@ -176,47 +157,47 @@ func (cfg *UnisphereConfig) SearchAuth(name string) (string, string) {
 	return "", ""
 }
 
-func (cfg *UnisphereConfig) GetConfig() *UnisphereConfig {
+func GetConfig() *UnisphereConfig {
 	return cfg
 }
 
-func (cfg *UnisphereConfig) GetMetricsEndpoint() string {
-	if cfg.Server.Metrics.Enabled {
-		return cfg.Server.Metrics.Endpoint + cfg.Server.Metrics.Api_Path
+func (_cfg *UnisphereConfig) GetMetricsEndpoint() string {
+	if _cfg.Server.Metrics.Enabled {
+		return _cfg.Server.Metrics.Endpoint + _cfg.Server.Metrics.Api_Path
 	}
 	return ""
 }
 
-func (cfg *UnisphereConfig) GetMetricsMode() string {
-	if cfg.Server.Metrics.Enabled {
-		return cfg.Server.Metrics.Mode
+func (_cfg *UnisphereConfig) GetMetricsMode() string {
+	if _cfg.Server.Metrics.Enabled {
+		return _cfg.Server.Metrics.Mode
 	}
 	return ""
 }
 
-func (cfg *UnisphereConfig) GetMetricsInsecure() bool {
-	insecure, _ := strconv.ParseBool(cfg.Server.Metrics.Insecure)
+func (_cfg *UnisphereConfig) GetMetricsInsecure() bool {
+	insecure, _ := strconv.ParseBool(_cfg.Server.Metrics.Insecure)
 	return insecure
 }
 
-func (cfg *UnisphereConfig) GetLogsEndpoint() string {
-	if cfg.Server.Logs.Enabled {
-		return cfg.Server.Logs.Endpoint + cfg.Server.Logs.Api_Path
+func (_cfg *UnisphereConfig) GetLogsEndpoint() string {
+	if _cfg.Server.Logs.Enabled {
+		return _cfg.Server.Logs.Endpoint + _cfg.Server.Logs.Api_Path
 	}
 	return ""
 }
-func (cfg *UnisphereConfig) GetLogsMode() string {
-	if cfg.Server.Logs.Enabled {
-		return cfg.Server.Logs.Mode
+func (_cfg *UnisphereConfig) GetLogsMode() string {
+	if _cfg.Server.Logs.Enabled {
+		return _cfg.Server.Logs.Mode
 	}
 	return ""
 }
 
-func (cfg *UnisphereConfig) GetLogsInsecure() bool {
-	insecure, _ := strconv.ParseBool(cfg.Server.Logs.Insecure)
+func (_cfg *UnisphereConfig) GetLogsInsecure() bool {
+	insecure, _ := strconv.ParseBool(_cfg.Server.Logs.Insecure)
 	return insecure
 }
 
-func (cfg *UnisphereConfig) GetClientList() []*ClientConfig {
-	return cfg.Clients
+func (_cfg *UnisphereConfig) GetClientList() []*ClientConfig {
+	return _cfg.Clients
 }

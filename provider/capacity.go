@@ -2,97 +2,83 @@ package provider
 
 import (
 	"context"
-	"errors"
 	"log/slog"
-	"time"
-	"unisphere_exporter/config"
+	"unisphere_exporter/gounity/api"
+	"unisphere_exporter/utils"
 
 	"go.opentelemetry.io/otel/metric"
-	sdkMetric "go.opentelemetry.io/otel/sdk/metric"
 )
 
 func init() {
+	// Set Default
 	moduleName := "capacity"
-	registProvider(moduleName, &capacityProvider{moduleName: moduleName})
-}
+	SetDefaultProvider(moduleName, true)
 
-func (pv *capacityProvider) IsDefaultEnabled() bool {
-	return false
-}
+	// Init Metrics Descriptions...
+	var capacityMetricDescs = []*MetricDescriptor{
+		{
+			Key:      "sizeTotal",
+			Name:     "unisphere_capacity_total_capacity",
+			Desc:     "Total capacity of unisphere capacity",
+			Unit:     "mb",
+			TypeName: "gauge",
+		},
+		{
+			Key:      "sizeUsed",
+			Name:     "unisphere_capacity_used_capacity",
+			Desc:     "Used capacity of unisphere capacity",
+			Unit:     "mb",
+			TypeName: "gauge",
+		},
+		{
+			Key:      "sizeFree",
+			Name:     "unisphere_capacity_free_capacity",
+			Desc:     "Free capacity of unisphere capacity",
+			Unit:     "mb",
+			TypeName: "gauge",
+		},
+		{
+			Key:      "sizePreallocated",
+			Name:     "unisphere_capacity_preallocated_capacity",
+			Desc:     "Total provisioned capacity of unisphere capacity",
+			Unit:     "mb",
+			TypeName: "gauge",
+		},
+		{
+			Key:      "totalLogicalSize",
+			Name:     "unisphere_capacity_total_provision",
+			Desc:     "Total provisioned capacity of unisphere capacity",
+			Unit:     "mb",
+			TypeName: "gauge",
+		},
+	}
 
-func (pv *capacityProvider) NewProvider(cfg *config.UnisphereConfig, moduleName string, cl *ClientDesc) Provider {
-	pvConf := cfg.Providers.Capacity
-	enabled := pvConf.GetEnabled(pv.IsDefaultEnabled())
-	interval := pvConf.GetInterval()
+	// Init Option
+	opt := api.NewUnityActionOptions("systemCapacity")
+	for _, desc := range capacityMetricDescs {
+		opt.Fields = append(opt.Fields, desc.Key)
+	}
 
-	if !enabled {
-		return nil
-	}
-	if MetricExporter == nil {
-		return nil
-	}
-	mp := NewMeterProvider(serviceName, interval, MetricExporter)
-	return &capacityProvider{
-		moduleName:    moduleName,
-		interval:      interval,
-		meterProvider: mp,
-		clientDesc:    cl,
-	}
+	registryProvider(moduleName, &capacityProvider{
+		moduleName: moduleName,
+		opts:       opt,
+		desc:       capacityMetricDescs,
+	})
 }
 
 type capacityProvider struct {
-	moduleName    string
-	interval      time.Duration
-	meterProvider *sdkMetric.MeterProvider
-	clientDesc    *ClientDesc
+	moduleName string
+	opts       *api.UnityActionOptions
+	desc       []*MetricDescriptor
 }
 
-var capacityMetricDescs = []*MetricDescriptor{
-	{
-		Key:      "sizeTotal",
-		Name:     "unisphere_capacity_total_capacity",
-		Desc:     "Total capacity of unisphere capacity",
-		Unit:     "mb",
-		TypeName: "gauge",
-	},
-	{
-		Key:      "sizeUsed",
-		Name:     "unisphere_capacity_used_capacity",
-		Desc:     "Used capacity of unisphere capacity",
-		Unit:     "mb",
-		TypeName: "gauge",
-	},
-	{
-		Key:      "sizeFree",
-		Name:     "unisphere_capacity_free_capacity",
-		Desc:     "Free capacity of unisphere capacity",
-		Unit:     "mb",
-		TypeName: "gauge",
-	},
-	{
-		Key:      "sizePreallocated",
-		Name:     "unisphere_capacity_preallocated_capacity",
-		Desc:     "Total provisioned capacity of unisphere capacity",
-		Unit:     "mb",
-		TypeName: "gauge",
-	},
-	{
-		Key:      "totalLogicalSize",
-		Name:     "unisphere_capacity_total_provision",
-		Desc:     "Total provisioned capacity of unisphere capacity",
-		Unit:     "mb",
-		TypeName: "gauge",
-	},
-}
-
-func (pv *capacityProvider) Run(logger *slog.Logger) {
-	logger.Info("Starting provider", "endpoint", pv.clientDesc.endpoint, "provider", pv.moduleName)
-	meter := pv.meterProvider.Meter(pv.moduleName)
-	uc := pv.clientDesc.client
+func (_pv *capacityProvider) Run(logger *slog.Logger, col *Collector) {
+	meter := col.meterProvider.Meter(_pv.moduleName)
+	client := col.Client
 
 	// Register Metrics...
 	var observableMap map[string]metric.Float64Observable
-	observableMap = CreateMapMetricDescriptor(meter, capacityMetricDescs, logger)
+	observableMap = CreateMapMetricDescriptor(meter, _pv.desc, logger)
 
 	// Register Metrics for Observables...
 	var observableArray []metric.Observable
@@ -100,33 +86,29 @@ func (pv *capacityProvider) Run(logger *slog.Logger) {
 		observableArray = append(observableArray, obserable)
 	}
 
-	// Request Fields
-	var paramsFields = []string{"sizeTotal", "sizeUsed", "sizeFree", "sizePreallocated", "totalLogicalSize"}
-
 	// Callback
 	meter.RegisterCallback(func(ctx context.Context, observer metric.Observer) error {
 
-		// Client Attributes
-		if pv.clientDesc.hostLabels == nil {
-			return errors.New("hostLabels not set")
+		// Set Attributes
+		if col.labels == nil {
+			logger.Debug("hostLabels not set")
+			return nil
 		}
-		clientAttrs := metric.WithAttributes(pv.clientDesc.hostLabels...)
+		clientAttrs := metric.WithAttributes(append(col.resource.Attributes(), col.labels...)...)
 
 		// Request Data
-		data, err := uc.GetSystemCapacityInstances(paramsFields, nil)
+		data, err := client.GetInstances(_pv.opts)
 		if err != nil {
-			logger.Error("Failed to get capacity", "error", err)
+			logger.Error("Failed to get", "error", err, "module", _pv.moduleName)
 			return nil
 		}
 
 		// Capacity Attributes...
-		for _, entry := range data.Entries {
-			content := entry.Content
-			observer.ObserveFloat64(observableMap["sizeTotal"], content.SizeTotal.ToMiB(), clientAttrs)
-			observer.ObserveFloat64(observableMap["sizeUsed"], content.SizeUsed.ToMiB(), clientAttrs)
-			observer.ObserveFloat64(observableMap["sizeFree"], content.SizeFree.ToMiB(), clientAttrs)
-			observer.ObserveFloat64(observableMap["sizePreallocated"], content.SizePreallocated.ToMiB(), clientAttrs)
-			observer.ObserveFloat64(observableMap["totalLogicalSize"], content.TotalLogicalSize.ToMiB(), clientAttrs)
+		for _, v := range data {
+			for _, desc := range _pv.desc {
+				key := desc.Key
+				observer.ObserveFloat64(observableMap[key], utils.Bytes(v.Get(key).Int()).ToMiB(), clientAttrs)
+			}
 		}
 
 		return nil

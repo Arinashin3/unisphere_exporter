@@ -58,10 +58,10 @@ auths:
 # if interval is not define, that will be to set global.
 providers:
   system:
-    enabled: true
   capacity:
-    enabled: true
-  metric_a:
+    test: ala
+  metric:
+    enabled: tr
     paths:
       - "sp.*.physical.coreCount"
       - "sp.*.cpu.summary.busyTicks"
@@ -84,7 +84,6 @@ providers:
       - "sp.*.iscsi.fePort.*.reads"
       - "sp.*.iscsi.fePort.*.writes"
     interval: 1m
-    enabled: true
   metric_b:
     paths:
     interval: 1m
@@ -97,5 +96,3 @@ providers:
     enabled: true
     level: 5
   lun:
-    enabled: true
-    interval: 1m
