@@ -11,16 +11,16 @@ import (
 )
 
 func init() {
-	moduleName := "event"
-	registProvider(moduleName, &eventProvider{moduleName: moduleName})
+	moduleName := "alert"
+	registProvider(moduleName, &alertProvider{moduleName: moduleName})
 }
 
-func (pv *eventProvider) IsDefaultEnabled() bool {
+func (pv *alertProvider) IsDefaultEnabled() bool {
 	return true
 }
 
-func (pv *eventProvider) NewProvider(cfg *config.UnisphereConfig, moduleName string, cl *ClientDesc) Provider {
-	pvConf := cfg.Providers.Event
+func (pv *alertProvider) NewProvider(cfg *config.UnisphereConfig, moduleName string, cl *ClientDesc) Provider {
+	pvConf := cfg.Providers.Alert
 	enabled := pvConf.GetEnabled(pv.IsDefaultEnabled())
 	interval := pvConf.GetInterval()
 
@@ -31,7 +31,7 @@ func (pv *eventProvider) NewProvider(cfg *config.UnisphereConfig, moduleName str
 		return nil
 	}
 	lp := NewLoggerProvider(serviceName, interval, LogExporter)
-	return &eventProvider{
+	return &alertProvider{
 		moduleName:     moduleName,
 		interval:       interval,
 		level:          pvConf.Level,
@@ -40,7 +40,7 @@ func (pv *eventProvider) NewProvider(cfg *config.UnisphereConfig, moduleName str
 	}
 }
 
-type eventProvider struct {
+type alertProvider struct {
 	moduleName     string
 	interval       time.Duration
 	level          int
@@ -48,7 +48,7 @@ type eventProvider struct {
 	clientDesc     *ClientDesc
 }
 
-func (pv *eventProvider) Run(logger *slog.Logger) {
+func (pv *alertProvider) Run(logger *slog.Logger) {
 	logger.Info("Starting provider", "endpoint", pv.clientDesc.endpoint, "provider", pv.moduleName)
 	ctx := context.Background()
 	ctime := time.Now().Add(-time.Hour).UTC()
@@ -68,9 +68,9 @@ func (pv *eventProvider) Run(logger *slog.Logger) {
 		filters := []string{
 			"creationTime gt \"" + ctime.Format("2006-01-02T15:04:05.000Z") + "\"",
 		}
-		data, err := uc.GetEventInstances(fields, filters)
+		data, err := uc.GetAlertInstances(fields, filters)
 		if err != nil {
-			logger.Error("Error to GET EventLog", "err", err)
+			logger.Error("Error to GET AlertLog", "err", err)
 			time.Sleep(pv.interval)
 			continue
 		}

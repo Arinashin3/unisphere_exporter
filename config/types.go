@@ -1,7 +1,5 @@
 package config
 
-import "time"
-
 type Config interface {
 	LoadFile(file *string) error
 	GetMetricsMode() string
@@ -30,7 +28,6 @@ type GlobalServerConfig struct {
 type GlobalClientConfig struct {
 	Auth     string            `yaml:"auth"`
 	Insecure bool              `yaml:"insecure,omitempty"`
-	Interval time.Duration     `yaml:"interval,omitempty"`
 	Labels   map[string]string `yaml:"labels,omitempty"`
 }
 
@@ -72,7 +69,6 @@ type ClientConfig struct {
 	Endpoint string            `yaml:"endpoint"`
 	Auth     string            `yaml:"auth,omitempty"`
 	Insecure string            `yaml:"insecure,omitempty"`
-	Interval string            `yaml:"interval,omitempty"`
 	Labels   map[string]string `yaml:"labels,omitempty"`
 }
 
