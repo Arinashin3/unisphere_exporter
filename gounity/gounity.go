@@ -1,14 +1,18 @@
 package gounity
 
 import (
+	"bytes"
 	"context"
 	"crypto/tls"
 	"encoding/base64"
+	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net"
 	"net/http"
 	"net/http/cookiejar"
+	"time"
 	"unisphere_exporter/gounity/api"
 
 	"github.com/tidwall/gjson"
@@ -126,4 +130,39 @@ func (_c *UnisphereClient) GetInstances(opt *api.UnityActionOptions) ([]gjson.Re
 	data = gjson.GetBytes(body, "entries.#.content").Array()
 
 	return data, nil
+}
+
+func (_c *UnisphereClient) PostMetricRealTimeQuery(opt *api.UnityActionOptions, paths []string, interval time.Duration) (string, error) {
+	var path string
+	var req *http.Request
+	var body []byte
+	var err error
+	if opt == nil {
+		return "", errors.New("option is required")
+	}
+	if path, err = opt.ParseRaw(); err != nil {
+		return "", err
+	}
+
+	var reqData struct {
+		Paths    []string `json:"paths"`
+		Interval int      `json:"interval"`
+	}
+	reqData.Paths = paths
+	reqData.Interval = int(interval / time.Second)
+	reqBody, err := json.Marshal(reqData)
+
+	if req, err = http.NewRequest("POST", _c.endpoint+path, bytes.NewBuffer(reqBody)); err != nil {
+		return "", err
+	}
+
+	if body, err = _c.send(req); err != nil {
+		return "", err
+	}
+
+	var qid string
+	qid = gjson.GetBytes(body, "content.id").String()
+	fmt.Println(qid)
+
+	return qid, nil
 }

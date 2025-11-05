@@ -53,46 +53,70 @@ auths:
     user: 'appez'
     password: 'Passw0rd1!'
 
-# Providers Sections
+# Collector's Sections
 # default :
-# if interval is not define, that will be to set global.
-providers:
-  system:
-  capacity:
-    test: ala
+collectors:
+  basicSystemInfo:
+    enabled: true
+  systemCapacity:
+    enabled: true
   metric:
-    enabled: tr
+    enabled: true
     paths:
-      - "sp.*.physical.coreCount"
-      - "sp.*.cpu.summary.busyTicks"
-      - "sp.*.blockCache.global.summary.cleanBytes"
-      - "sp.*.blockCache.global.summary.cleanPages"
-      - "sp.*.blockCache.global.summary.dirtyBytes"
-      - "sp.*.blockCache.global.summary.dirtyPages"
-      - "sp.*.blockCache.global.summary.flushedBlocks"
-      - "sp.*.blockCache.global.summary.flushedes"
-      - "sp.*.physical.disk.*.readBlocks"
-      - "sp.*.physical.disk.*.writeBlocks"
-      - "sp.*.physical.disk.*.reads"
-      - "sp.*.physical.disk.*.writes"
-      - "sp.*.fibreChannel.fePort.*.readBlocks"
-      - "sp.*.fibreChannel.fePort.*.writeBlocks"
-      - "sp.*.fibreChannel.fePort.*.reads"
-      - "sp.*.fibreChannel.fePort.*.writes"
-      - "sp.*.iscsi.fePort.*.readBlocks"
-      - "sp.*.iscsi.fePort.*.writeBlocks"
-      - "sp.*.iscsi.fePort.*.reads"
-      - "sp.*.iscsi.fePort.*.writes"
-    interval: 1m
-  metric_b:
-    paths:
-    interval: 1m
-    enabled: false
-  metric_c:
-    paths:
-    interval: 5m
-    enabled: false
+    # Cpu
+    - "sp.*.physical.coreCount"
+    - "sp.*.cpu.summary.busyTicks"
+    - "sp.*.cpu.summary.idleTicks"
+    - "sp.*.cpu.summary.waitTicks"
+
+    # Memory
+    - "sp.*.memory.summary.totalBytes"
+    - "sp.*.memory.summary.totalUsedBytes"
+    - "sp.*.memory.summary.cachedBytes"
+    - "sp.*.memory.summary.freeBytes"
+    - "sp.*.memory.summary.buffersBytes"
+
+    # Cache Memory
+    - "sp.*.memory.bufferCache.lookups"
+    - "sp.*.memory.bufferCache.hits"
+    - "sp.*.blockCache.global.summary.cleanPages"
+    - "sp.*.blockCache.global.summary.dirtyBytes"
+    - "sp.*.blockCache.global.summary.dirtyPages"
+    - "sp.*.blockCache.global.summary.flushedBlocks"
+    - "sp.*.blockCache.global.summary.flushes"
+
+    # Physical Disk
+    - "sp.*.physical.disk.*.readBlocks"
+    - "sp.*.physical.disk.*.writeBlocks"
+    - "sp.*.physical.disk.*.reads"
+    - "sp.*.physical.disk.*.writes"
+
+    # FibreChannel
+    - "sp.*.fibreChannel.fePort.*.readBlocks"
+    - "sp.*.fibreChannel.fePort.*.writeBlocks"
+    - "sp.*.fibreChannel.fePort.*.reads"
+    - "sp.*.fibreChannel.fePort.*.writes"
+
+    # Iscsi
+    - "sp.*.iscsi.fePort.*.readBlocks"
+    - "sp.*.iscsi.fePort.*.writeBlocks"
+    - "sp.*.iscsi.fePort.*.reads"
+    - "sp.*.iscsi.fePort.*.writes"
+
+    # Ethernet Port
+    - "sp.*.net.device.*.bytesIn"
+    - "sp.*.net.device.*.bytesOut"
+    - "sp.*.net.device.*.pktsIn"
+    - "sp.*.net.device.*.pktsOut"
+  lun:
+    enabled: true
   event:
     enabled: true
-    level: 5
-  lun:
+  disk:
+    enabled: true
+  fcPort:
+    enabled: true
+  ethernetPort:
+    enabled: true
+  host:
+    enabled: true

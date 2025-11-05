@@ -1,4 +1,4 @@
-package provider
+package collectors
 
 import (
 	"context"
@@ -7,15 +7,34 @@ import (
 	"unisphere_exporter/utils"
 
 	"go.opentelemetry.io/otel/metric"
+	"gopkg.in/yaml.v3"
 )
 
-func init() {
-	// Set Default
-	moduleName := "capacity"
-	SetDefaultProvider(moduleName, true)
+type ModuleSystemCapacity struct {
+	// Module's Information
+	name     string
+	opts     *api.UnityActionOptions
+	desc     []*MetricDescriptor
+	defaults bool
 
-	// Init Metrics Descriptions...
-	var capacityMetricDescs = []*MetricDescriptor{
+	// Configuration File
+	Enabled *bool `yaml:"enabled"`
+}
+
+func init() {
+	key := "systemCapacity"
+	RegisterModule(key, NewSystemCapacity())
+}
+
+func NewSystemCapacity() *ModuleSystemCapacity {
+	return &ModuleSystemCapacity{
+		defaults: true,
+	}
+}
+
+func (_m *ModuleSystemCapacity) Init(key string) {
+	_m.name = key
+	_m.desc = []*MetricDescriptor{
 		{
 			Key:      "sizeTotal",
 			Name:     "unisphere_capacity_total_capacity",
@@ -52,33 +71,33 @@ func init() {
 			TypeName: "gauge",
 		},
 	}
-
-	// Init Option
-	opt := api.NewUnityActionOptions("systemCapacity")
-	for _, desc := range capacityMetricDescs {
-		opt.Fields = append(opt.Fields, desc.Key)
+	_m.opts = api.NewUnityActionOptions("systemCapacity")
+	for _, desc := range _m.desc {
+		_m.opts.Fields = append(_m.opts.Fields, desc.Key)
 	}
-
-	registryProvider(moduleName, &capacityProvider{
-		moduleName: moduleName,
-		opts:       opt,
-		desc:       capacityMetricDescs,
-	})
 }
 
-type capacityProvider struct {
-	moduleName string
-	opts       *api.UnityActionOptions
-	desc       []*MetricDescriptor
+func (_m *ModuleSystemCapacity) GetEnabled() bool {
+	return *_m.Enabled
 }
 
-func (_pv *capacityProvider) Run(logger *slog.Logger, col *Collector) {
-	meter := col.meterProvider.Meter(_pv.moduleName)
+func (_m *ModuleSystemCapacity) SetConfig(body []byte) {
+	err := yaml.Unmarshal(body, _m)
+	if err != nil {
+		panic(err)
+	}
+	if _m.Enabled == nil {
+		_m.Enabled = &_m.defaults
+	}
+}
+
+func (_m *ModuleSystemCapacity) Run(logger *slog.Logger, col *Collector) {
+	meter := col.meterProvider.Meter(_m.name)
 	client := col.Client
 
 	// Register Metrics...
 	var observableMap map[string]metric.Float64Observable
-	observableMap = CreateMapMetricDescriptor(meter, _pv.desc, logger)
+	observableMap = CreateMapMetricDescriptor(meter, _m.desc, logger)
 
 	// Register Metrics for Observables...
 	var observableArray []metric.Observable
@@ -97,15 +116,17 @@ func (_pv *capacityProvider) Run(logger *slog.Logger, col *Collector) {
 		clientAttrs := metric.WithAttributes(append(col.resource.Attributes(), col.labels...)...)
 
 		// Request Data
-		data, err := client.GetInstances(_pv.opts)
+		data, err := client.GetInstances(_m.opts)
 		if err != nil {
-			logger.Error("Failed to get", "error", err, "module", _pv.moduleName)
+			logger.Error("Failed to get", "error", err, "module", _m.name)
+			col.success = false
 			return nil
 		}
+		col.success = true
 
 		// Capacity Attributes...
 		for _, v := range data {
-			for _, desc := range _pv.desc {
+			for _, desc := range _m.desc {
 				key := desc.Key
 				observer.ObserveFloat64(observableMap[key], utils.Bytes(v.Get(key).Int()).ToMiB(), clientAttrs)
 			}

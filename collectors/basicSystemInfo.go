@@ -1,4 +1,4 @@
-package provider
+package collectors
 
 import (
 	"context"
@@ -7,15 +7,34 @@ import (
 
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
+	"go.yaml.in/yaml/v3"
 )
 
 func init() {
-	moduleName := "basicSystemInfo"
+	key := "basicSystemInfo"
+	RegisterModule(key, NewBasicSystemInfo())
+}
 
-	SetDefaultProvider(moduleName, true)
+type ModuleBasicSystemInfo struct {
+	// Module's Information
+	name     string
+	opts     *api.UnityActionOptions
+	desc     []*MetricDescriptor
+	defaults bool // Default Enabled
 
-	// Init Metrics Descriptions...
-	var basicSystemInfoMetricDescs = []*MetricDescriptor{
+	// Configuration File
+	Enabled *bool `yaml:"enabled"`
+}
+
+func NewBasicSystemInfo() *ModuleBasicSystemInfo {
+	return &ModuleBasicSystemInfo{
+		defaults: true,
+	}
+}
+
+func (_m *ModuleBasicSystemInfo) Init(key string) {
+	_m.name = key
+	_m.desc = []*MetricDescriptor{
 		{
 			Key:      "info",
 			Name:     "unisphere_basic_system_info",
@@ -24,31 +43,31 @@ func init() {
 			TypeName: "gauge",
 		},
 	}
-
-	// Init Option
-	opt := api.NewUnityActionOptions("basicSystemInfo")
-	opt.Fields = []string{"model", "softwareFullVersion"}
-
-	registryProvider(moduleName, &basicSystemInfoProvider{
-		moduleName: moduleName,
-		opts:       opt,
-		desc:       basicSystemInfoMetricDescs,
-	})
+	_m.opts = api.NewUnityActionOptions("basicSystemInfo")
+	_m.opts.Fields = []string{"model", "softwareFullVersion"}
 }
 
-type basicSystemInfoProvider struct {
-	moduleName string
-	opts       *api.UnityActionOptions
-	desc       []*MetricDescriptor
+func (_m *ModuleBasicSystemInfo) GetEnabled() bool {
+	return *_m.Enabled
 }
 
-func (_pv *basicSystemInfoProvider) Run(logger *slog.Logger, col *Collector) {
-	meter := col.meterProvider.Meter(_pv.moduleName)
+func (_m *ModuleBasicSystemInfo) SetConfig(body []byte) {
+	err := yaml.Unmarshal(body, _m)
+	if err != nil {
+		panic(err)
+	}
+	if _m.Enabled == nil {
+		_m.Enabled = &_m.defaults
+	}
+}
+
+func (_m *ModuleBasicSystemInfo) Run(logger *slog.Logger, col *Collector) {
+	meter := col.meterProvider.Meter(_m.name)
 	client := col.Client
 
 	// Register Metrics...
 	var observableMap map[string]metric.Float64Observable
-	observableMap = CreateMapMetricDescriptor(meter, _pv.desc, logger)
+	observableMap = CreateMapMetricDescriptor(meter, _m.desc, logger)
 
 	// Register Metrics for Observables...
 	var observableArray []metric.Observable
@@ -67,9 +86,9 @@ func (_pv *basicSystemInfoProvider) Run(logger *slog.Logger, col *Collector) {
 		clientAttrs := metric.WithAttributes(append(col.resource.Attributes(), col.labels...)...)
 
 		// Request Data
-		data, err := client.GetInstances(_pv.opts)
+		data, err := client.GetInstances(_m.opts)
 		if err != nil {
-			logger.Error("Failed to get", "error", err, "module", _pv.moduleName)
+			logger.Error("Failed to get", "error", err, "module", _m.name)
 			return nil
 		}
 

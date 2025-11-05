@@ -1,4 +1,4 @@
-package provider
+package collectors
 
 import (
 	"context"
@@ -7,23 +7,37 @@ import (
 	"unisphere_exporter/utils"
 
 	"go.opentelemetry.io/otel/attribute"
+	"gopkg.in/yaml.v3"
 
 	"go.opentelemetry.io/otel/metric"
 )
 
-type lunProvider struct {
-	moduleName string
-	opts       *api.UnityActionOptions
-	desc       []*MetricDescriptor
+func init() {
+	key := "lun"
+	RegisterModule(key, NewLun())
 }
 
-func init() {
-	// Set Default
-	moduleName := "lun"
-	SetDefaultProvider(moduleName, false)
+type ModuleLun struct {
+	// Module's Information
+	name     string
+	opts     *api.UnityActionOptions
+	desc     []*MetricDescriptor
+	defaults bool
 
-	// Init Metrics Descriptions...
-	var lunMetricDescs = []*MetricDescriptor{
+	// Configuration File
+	Enabled    *bool
+	ExcludeLun []string
+}
+
+func NewLun() *ModuleLun {
+	return &ModuleLun{
+		defaults: false,
+	}
+}
+
+func (_m *ModuleLun) Init(key string) {
+	_m.name = key
+	_m.desc = []*MetricDescriptor{
 		{
 			Key:      "sizeTotal",
 			Name:     "unisphere_lun_total_size",
@@ -53,23 +67,29 @@ func init() {
 			TypeName: "gauge",
 		},
 	}
-
-	// Init Option
-	opt := api.NewUnityActionOptions(moduleName)
-	for _, desc := range lunMetricDescs {
-		opt.Fields = append(opt.Fields, desc.Key)
+	_m.opts = api.NewUnityActionOptions("lun")
+	for _, v := range _m.desc {
+		_m.opts.Fields = append(_m.opts.Fields, v.Key)
 	}
-	opt.Fields = append(opt.Fields, "name", "wwn")
-
-	registryProvider(moduleName, &lunProvider{
-		moduleName: moduleName,
-		opts:       opt,
-		desc:       lunMetricDescs,
-	})
+	_m.opts.Fields = append(_m.opts.Fields, "name", "id")
 }
 
-func (_pv *lunProvider) Run(logger *slog.Logger, col *Collector) {
-	meter := col.meterProvider.Meter(_pv.moduleName)
+func (_m *ModuleLun) GetEnabled() bool {
+	return *_m.Enabled
+}
+
+func (_m *ModuleLun) SetConfig(body []byte) {
+	err := yaml.Unmarshal(body, _m)
+	if err != nil {
+		panic(err)
+	}
+	if _m.Enabled == nil {
+		_m.Enabled = &_m.defaults
+	}
+}
+
+func (_pv *ModuleLun) Run(logger *slog.Logger, col *Collector) {
+	meter := col.meterProvider.Meter(_pv.name)
 	client := col.Client
 
 	// Register Metrics...
@@ -94,13 +114,15 @@ func (_pv *lunProvider) Run(logger *slog.Logger, col *Collector) {
 		// Request Data
 		data, err := client.GetInstances(_pv.opts)
 		if err != nil {
-			logger.Error("Failed to get", "error", err, "module", _pv.moduleName)
+			logger.Error("Failed to get", "error", err, "module", _pv.name)
+			col.success = false
 			return nil
 		}
+		col.success = true
 
 		// Capacity Attributes...
 		for _, v := range data {
-			lunAttrs := metric.WithAttributes(attribute.String("lun.name", v.Get("name").String()), attribute.String("lun.wwn", v.Get("wwn").String()))
+			lunAttrs := metric.WithAttributes(attribute.String("lun.id", v.Get("id").String()), attribute.String("lun.name", v.Get("name").String()))
 			for _, desc := range _pv.desc {
 				key := desc.Key
 				observer.ObserveFloat64(observableMap[key], utils.Bytes(v.Get(key).Int()).ToMiB(), clientAttrs, lunAttrs)

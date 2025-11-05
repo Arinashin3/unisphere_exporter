@@ -7,9 +7,9 @@ import (
 	"os"
 	"strconv"
 	"time"
+	"unisphere_exporter/collectors"
 	"unisphere_exporter/config"
 	"unisphere_exporter/gounity"
-	"unisphere_exporter/provider"
 	"unisphere_exporter/utils"
 
 	"github.com/alecthomas/kingpin/v2"
@@ -23,7 +23,7 @@ import (
 const serviceName = "unisphere_exporter"
 
 var (
-	configFile = kingpin.Flag("config.file", "Path to config file.").Short('c').Default("config.yml").String()
+	configFile = kingpin.Flag("config.file", "Paths to config file.").Short('c').Default("config.yml").String()
 	logger     *slog.Logger
 	isFailed   bool
 )
@@ -48,30 +48,30 @@ func main() {
 	}
 
 	// Set Config Providers...
-	for k, v := range cfg.Providers {
-		// Check Providers...
-		if !provider.FindDefaultProvider(k) {
-			continue
-		}
-		if v == nil {
-			//provider.EnabledProvider[k] = true
-			continue
-		}
+	//for k, v := range cfg.Providers {
+	// Check Providers...
+	//if !provider.FindDefaultProvider(k) {
+	//	continue
+	//}
+	//if v == nil {
+	//provider.EnabledProvider[k] = true
+	//continue
+	//}
 
-		// Check Provider Enabled
-		// When Provider is existed in config file,
-		// Allow Provider setting in config file.
-		//enabledConf := v.(map[string]interface{})["enabled"]
-		//if enabledConf != nil {
-		//enabled := enabledConf.(bool)
-		if provider.FindDefaultProvider(k) {
-			//provider.EnabledProvider[k] = enabled
-		}
-		//} else {
-		//provider.EnabledProvider[k] = true
-		//}
+	// Check Provider Enabled
+	// When Provider is existed in config file,
+	// Allow Provider setting in config file.
+	//enabledConf := v.(map[string]interface{})["enabled"]
+	//if enabledConf != nil {
+	//enabled := enabledConf.(bool)
+	//if provider.FindDefaultProvider(k) {
+	//provider.EnabledProvider[k] = enabled
+	//}
+	//} else {
+	//provider.EnabledProvider[k] = true
+	//}
 
-	}
+	//}
 
 	// Create Exporters...
 	var me *sdkMetric.Exporter
@@ -92,7 +92,7 @@ func main() {
 	}
 
 	// Create Collectors...
-	var cols = make(map[string]*provider.Collector)
+	var cols = make(map[string]*collectors.Collector)
 	var insecureTr = gounity.NewTransport(true)
 	var secureTr = gounity.NewTransport(false)
 	for _, clientConf := range cfg.Clients {
@@ -104,8 +104,8 @@ func main() {
 		attrs = append(attrs, attribute.String("service.name", serviceName))
 
 		// Create Collector...
-		var col *provider.Collector
-		if col, err = provider.NewCollector(ctx, attrs); err != nil {
+		var col *collectors.Collector
+		if col, err = collectors.NewCollector(ctx, attrs); err != nil {
 			logger.Error("Failed to create collector.", "error", err)
 			isFailed = true
 		}

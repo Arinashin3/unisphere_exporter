@@ -1,4 +1,4 @@
-package provider
+package collectors
 
 import (
 	"encoding/json"
@@ -9,44 +9,66 @@ import (
 
 	"github.com/tidwall/gjson"
 	"go.opentelemetry.io/otel/log"
+	"gopkg.in/yaml.v3"
 )
 
 func init() {
-	moduleName := "alert"
-	SetDefaultProvider(moduleName, true)
-	opt := api.NewUnityActionOptions(moduleName)
-	startTime := time.Now().Add(-1 * time.Hour).UTC()
-	opt.Fields = []string{
+	key := "alert"
+	RegisterModule(key, NewAlert())
+
+}
+
+type ModuleAlert struct {
+	name      string
+	opts      *api.UnityActionOptions
+	defaults  bool
+	timestamp time.Time
+
+	// Configuration File
+	Enabled *bool `yaml:"enabled,omitempty"`
+	Level   int64 `yaml:"level,omitempty"`
+}
+
+func NewAlert() *ModuleAlert {
+	return &ModuleAlert{
+		defaults: false,
+		Level:    0,
+	}
+}
+
+func (_m *ModuleAlert) GetEnabled() bool {
+	return *_m.Enabled
+}
+
+func (_m *ModuleAlert) SetConfig(body []byte) {
+	err := yaml.Unmarshal(body, _m)
+	if err != nil {
+		panic(err)
+	}
+	if _m.Enabled == nil {
+		_m.Enabled = &_m.defaults
+	}
+}
+
+func (_m *ModuleAlert) Init(key string) {
+	_m.name = key
+	_m.opts = api.NewUnityActionOptions("alert")
+	_m.opts.Fields = []string{
 		"timestamp",
 		"severity",
 		"messageId",
 		"message",
 	}
-	opt.Filters = []string{
-		"timestamp gt \"" + startTime.Format("2006-01-02T15:04:05.000Z") + "\"",
-	}
-	registryProvider(moduleName, &alertProvider{
-		moduleName: moduleName,
-		opt:        opt,
-	})
-
 }
 
-type alertProvider struct {
-	moduleName string
-	opt        *api.UnityActionOptions
-	level      int
-}
-
-func (_pv *alertProvider) Run(logger *slog.Logger, col *Collector) {
-	opt := *_pv.opt
+func (_m *ModuleAlert) Run(logger *slog.Logger, col *Collector) {
+	opt := *_m.opts
 	ctime := time.Now().Add(-1 * time.Hour).UTC()
 	client := col.Client
 	lp := col.loggerProvider
 
 	for {
-
-		pvlogger := lp.Logger(_pv.moduleName, log.WithInstrumentationAttributes(col.labels...))
+		pvlogger := lp.Logger(_m.name, log.WithInstrumentationAttributes(col.labels...))
 		opt.Filters = []string{
 			"timestamp gt \"" + ctime.Format("2006-01-02T15:04:05.000Z") + "\"",
 		}
@@ -55,9 +77,11 @@ func (_pv *alertProvider) Run(logger *slog.Logger, col *Collector) {
 		data, err := client.GetInstances(&opt)
 		if err != nil {
 			logger.Error("Error to GET AlertLog", "err", err)
+			col.success = false
 			time.Sleep(col.interval)
 			continue
 		}
+		col.success = true
 		if len(data) == 0 {
 			time.Sleep(col.interval)
 			continue
@@ -65,7 +89,7 @@ func (_pv *alertProvider) Run(logger *slog.Logger, col *Collector) {
 
 		for _, v := range data {
 			record := log.Record{}
-			if _pv.level > int(v.Get("severity").Int()) {
+			if _m.Level > v.Get("severity").Int() {
 				continue
 			}
 

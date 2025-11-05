@@ -4,12 +4,11 @@ package config
 
 import (
 	"errors"
-	"fmt"
 	"os"
 	"reflect"
 	"strconv"
 	"time"
-	"unisphere_exporter/provider"
+	"unisphere_exporter/collectors"
 
 	"gopkg.in/yaml.v3"
 )
@@ -17,22 +16,11 @@ import (
 var cfg *UnisphereConfig
 
 type UnisphereConfig struct {
-	Global    *GlobalConfig              `yaml: "global,omitempty"`
-	Server    *ServerConfig              `yaml: "server,omitempty"`
-	Clients   []*ClientConfig            `yaml: "targets,omitempty"`
-	Auths     []*AuthConfig              `yaml: "auths,omitempty"`
-	Providers map[string]provider.Option `yaml: "providers,omitempty"`
-}
-
-type Providers struct {
-	System   *ProviderDefaults `yaml:"system,omitempty"`
-	Lun      *ProviderDefaults `yaml:"lun,omitempty"`
-	Capacity *ProviderDefaults `yaml:"capacity,omitempty"`
-	Metric_A *ProviderMetric   `yaml:"metric_a,omitempty"`
-	Metric_B *ProviderMetric   `yaml:"metric_b,omitempty"`
-	Metric_C *ProviderMetric   `yaml:"metric_c,omitempty"`
-	Event    *ProviderEvent    `yaml:"event,omitempty"`
-	Alert    *ProviderEvent    `yaml:"alert,omitempty"`
+	Global     *GlobalConfig          `yaml:"global,omitempty"`
+	Server     *ServerConfig          `yaml:"server,omitempty"`
+	Clients    []*ClientConfig        `yaml:"clients,omitempty"`
+	Auths      []*AuthConfig          `yaml:"auths,omitempty"`
+	Collectors map[string]interface{} `yaml:"collectors,omitempty"`
 }
 
 func NewConfiguration() *UnisphereConfig {
@@ -64,8 +52,6 @@ func NewConfiguration() *UnisphereConfig {
 		},
 		Clients: nil,
 		Auths:   nil,
-		//Providers: make(map[string]interface{}),
-		Providers: provider.ModuleOptions,
 	}
 	return cfg
 }
@@ -75,12 +61,8 @@ func (_cfg *UnisphereConfig) LoadFile(file *string) error {
 	if err != nil {
 		return err
 	}
-	tmp := _cfg.Providers
 
 	err = yaml.Unmarshal(ymlContents, _cfg)
-	for k, v := range tmp {
-		fmt.Println(k, v)
-	}
 	if err != nil {
 		return err
 	}
@@ -88,6 +70,23 @@ func (_cfg *UnisphereConfig) LoadFile(file *string) error {
 	err = _cfg.applyGlobal()
 	if err != nil {
 		return err
+	}
+
+	// Check to exist modules in Provider
+	for k, _ := range _cfg.Collectors {
+		if collectors.RegistryModules[k] == nil {
+			return errors.New("provider " + k + " is not registered")
+		}
+	}
+
+	// Set Configuration Providers...
+	for k, v := range collectors.RegistryModules {
+		body, err := yaml.Marshal(_cfg.Collectors[k])
+		v.Init(k)
+		v.SetConfig(body)
+		if err != nil {
+			return err
+		}
 	}
 
 	return err
@@ -155,49 +154,4 @@ func (_cfg *UnisphereConfig) SearchAuth(name string) (string, string) {
 		}
 	}
 	return "", ""
-}
-
-func GetConfig() *UnisphereConfig {
-	return cfg
-}
-
-func (_cfg *UnisphereConfig) GetMetricsEndpoint() string {
-	if _cfg.Server.Metrics.Enabled {
-		return _cfg.Server.Metrics.Endpoint + _cfg.Server.Metrics.Api_Path
-	}
-	return ""
-}
-
-func (_cfg *UnisphereConfig) GetMetricsMode() string {
-	if _cfg.Server.Metrics.Enabled {
-		return _cfg.Server.Metrics.Mode
-	}
-	return ""
-}
-
-func (_cfg *UnisphereConfig) GetMetricsInsecure() bool {
-	insecure, _ := strconv.ParseBool(_cfg.Server.Metrics.Insecure)
-	return insecure
-}
-
-func (_cfg *UnisphereConfig) GetLogsEndpoint() string {
-	if _cfg.Server.Logs.Enabled {
-		return _cfg.Server.Logs.Endpoint + _cfg.Server.Logs.Api_Path
-	}
-	return ""
-}
-func (_cfg *UnisphereConfig) GetLogsMode() string {
-	if _cfg.Server.Logs.Enabled {
-		return _cfg.Server.Logs.Mode
-	}
-	return ""
-}
-
-func (_cfg *UnisphereConfig) GetLogsInsecure() bool {
-	insecure, _ := strconv.ParseBool(_cfg.Server.Logs.Insecure)
-	return insecure
-}
-
-func (_cfg *UnisphereConfig) GetClientList() []*ClientConfig {
-	return _cfg.Clients
 }

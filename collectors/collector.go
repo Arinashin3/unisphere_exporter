@@ -1,4 +1,4 @@
-package provider
+package collectors
 
 import (
 	"context"
@@ -19,23 +19,6 @@ import (
 
 const serviceName = "unisphere_exporter"
 
-var (
-	ModuleOptions = make(map[string]Option)
-	ProviderList  = make(map[string]Provider)
-)
-
-func SetDefaultProvider(name string, enabled bool) {
-}
-
-func FindDefaultProvider(key string) bool {
-	for k, _ := range ModuleOptions {
-		if k == key {
-			return true
-		}
-	}
-	return false
-}
-
 type Collector struct {
 	ctx            context.Context
 	resource       *resource.Resource
@@ -44,6 +27,7 @@ type Collector struct {
 	loggerProvider *sdkLog.LoggerProvider
 	interval       time.Duration
 	Client         *gounity.UnisphereClient
+	success        bool
 }
 
 func NewCollector(ctx context.Context, attrs []attribute.KeyValue) (*Collector, error) {
@@ -96,17 +80,12 @@ func (_col *Collector) Start(logger *slog.Logger) {
 
 	}
 
-	for k, v := range ModuleOptions {
-		if v != nil {
-			continue
+	for _, v := range RegistryModules {
+		if v.GetEnabled() {
+			go v.Run(logger, _col)
 		}
-		go ProviderList[k].Run(logger, _col)
 	}
 	select {}
-}
-
-func registryProvider(moduleName string, pv Provider) {
-	ProviderList[moduleName] = pv
 }
 
 type Provider interface {
